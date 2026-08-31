@@ -20,13 +20,20 @@ import calibration
 import database
 import dose_model
 import expiry_checker
+import generate_test_images
 import strip_reader
+
+# Auto-generate annotated test images with box labels & gradient line indicators
+generate_test_images.generate_all_test_assets()
 
 # -----------------------------------------------------------------------------
 # CONSTANTS & CONFIGURATION
 # -----------------------------------------------------------------------------
 # Placeholder cumulative threshold per OSHA / DGMS / OISD H2S exposure guidelines
 UNSAFE_CUMULATIVE_THRESHOLD: float = 50.0  # ppm * hours
+
+# Directory containing sample test images
+TEST_IMAGES_DIR = "test_images"
 
 # Initialize database table at app startup
 database.init_db()
@@ -110,13 +117,6 @@ st.markdown(
             background-color: #F1F5F9;
             border-right: 1px solid #E2E8F0;
         }
-
-        /* Footer styling */
-        .footer-text {
-            color: #94A3B8;
-            font-size: 0.85rem;
-            margin-top: 2rem;
-        }
     </style>
 """,
     unsafe_allow_html=True,
@@ -162,7 +162,7 @@ if page == "Home":
             of Hydrogen Sulfide (H₂S) wristband sensors in hazardous industrial environments.
             
             - 🏷️ **Worker Tracking:** Automated identification and cumulative exposure dose logging.
-            - 📸 **Camera Calibration:** Per-channel Ordinary Least Squares (OLS) lighting correction.
+            - 📸 **Camera & File Calibration:** Per-channel Ordinary Least Squares (OLS) lighting correction.
             - 🧪 **Colorimetric Analytics:** Perception-aligned HSV Value ($V$) channel staining intensity score.
             - 🚨 **DGMS/OISD Reporting:** Automated cumulative limit alerts and SQLite safety database logging.
             """
@@ -197,7 +197,7 @@ if page == "Home":
 elif page == "Scan Strip":
     st.title("📸 Scan Sensor Strip")
     st.caption(
-        "Enter worker details and capture a photo of the exposure wristband"
+        "Enter worker details and provide a photo of the exposure wristband"
         " alongside the reference color scale."
     )
 
@@ -213,7 +213,6 @@ elif page == "Scan Strip":
         is_worker_id_valid = False
 
         if worker_id_clean:
-            # Validate Worker ID format: 3-10 alphanumeric characters, hyphens or underscores
             if re.match(r"^[a-zA-Z0-9_-]{3,10}$", worker_id_clean):
                 is_worker_id_valid = True
                 st.caption("✅ Valid Worker ID format.")
@@ -222,35 +221,158 @@ elif page == "Scan Strip":
         else:
             st.caption("ℹ️ Worker ID is required to enable scan analysis.")
 
-        st.subheader("Step 2: Capture Image")
-        captured_image = st.camera_input(
-            "Photograph the strip next to the reference color scale"
+        st.subheader("Step 2: Provide Image")
+
+        input_mode = st.radio(
+            "Select Image Source Mode",
+            ["Sample Test Images / File Upload", "Live Camera Input"],
+            horizontal=True
         )
+
+        image_bytes_to_process = None
+
+        if input_mode == "Sample Test Images / File Upload":
+            # List all sample images from test_images/ folder if available
+            available_samples = []
+            if os.path.exists(TEST_IMAGES_DIR):
+                available_samples = sorted(
+                    [f for f in os.listdir(TEST_IMAGES_DIR) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+                )
+
+            sample_options = ["Upload Custom Image"] + [f"Sample: {f}" for f in available_samples]
+            selected_sample = st.selectbox("Select Sample Test Image or Upload", options=sample_options)
+
+            if selected_sample.startswith("Sample: "):
+                sample_filename = selected_sample.replace("Sample: ", "")
+                sample_filepath = os.path.join(TEST_IMAGES_DIR, sample_filename)
+                if os.path.exists(sample_filepath):
+                    with open(sample_filepath, "rb") as f:
+                        image_bytes_to_process = f.read()
+                    st.caption(f"📁 Loaded sample asset: `{sample_filename}`")
+            else:
+                uploaded_file = st.file_uploader("Upload Image File", type=["jpg", "jpeg", "png"])
+                if uploaded_file is not None:
+                    image_bytes_to_process = uploaded_file.getvalue()
+
+        else: # Live Camera Input
+            camera_file = st.camera_input("Photograph the strip next to the reference color scale")
+            if camera_file is not None:
+                image_bytes_to_process = camera_file.getvalue()
 
     with col2:
         st.subheader("Step 3: Preview & Analysis")
 
-        if captured_image is not None:
+        if image_bytes_to_process is not None:
             st.image(
-                captured_image,
-                caption="Captured Dosimeter Image",
-                use_column_width=True,
+                image_bytes_to_process,
+                caption="Dosimeter Image Preview",
+                use_container_width=True,
             )
         else:
-            st.info("📷 Image preview will appear here after capturing.")
+            st.info("📷 Image preview will appear here after selecting a sample, uploading a file, or taking a photo.")
+
+        # Image Region Block Boxes & Risk Level Cards
+        st.markdown("<h4 style='margin-top: 1rem; color: #F8FAFC;'>📌 Image Region (Box) Breakdown</h4>", unsafe_allow_html=True)
+
+        box_col1, box_col2, box_col3 = st.columns(3)
+
+        with box_col1:
+            st.markdown(
+                """
+                <div style="background-color: #1E293B; border-left: 4px solid #64748B; padding: 1rem; border-radius: 0.5rem; height: 100%;">
+                    <h5 style="color: #94A3B8; margin-top: 0;">1. Left Vertical Box</h5>
+                    <strong style="color: #F8FAFC;">Reference Color Scale</strong>
+                    <p style="font-size: 0.85rem; color: #CBD5E1; margin-top: 0.5rem; margin-bottom: 0;">
+                        5 calibrated swatches (White → Black) used by <code>calibration.py</code> for per-channel OLS lighting correction.
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        with box_col2:
+            st.markdown(
+                """
+                <div style="background-color: #1E293B; border-left: 4px solid #3B82F6; padding: 1rem; border-radius: 0.5rem; height: 100%;">
+                    <h5 style="color: #60A5FA; margin-top: 0;">2. Main Center Box</h5>
+                    <strong style="color: #F8FAFC;">H₂S Sensor Paper</strong>
+                    <p style="font-size: 0.85rem; color: #CBD5E1; margin-top: 0.5rem; margin-bottom: 0;">
+                        Colorimetric indicator paper that darkens proportionally upon exposure to H₂S gas (Intensity → Dose).
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        with box_col3:
+            st.markdown(
+                """
+                <div style="background-color: #1E293B; border-left: 4px solid #22C55E; padding: 1rem; border-radius: 0.5rem; height: 100%;">
+                    <h5 style="color: #4ADE80; margin-top: 0;">3. Bottom-Right Box</h5>
+                    <strong style="color: #F8FAFC;">Badge Expiry Patch</strong>
+                    <p style="font-size: 0.85rem; color: #CBD5E1; margin-top: 0.5rem; margin-bottom: 0;">
+                        Passive shelf-life patch analyzed via 3D HSV Euclidean distance (Fresh Green vs Expired Red).
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        st.markdown("<h4 style='margin-top: 1.5rem; color: #F8FAFC;'>⚠️ Exposure Risk Level Thresholds</h4>", unsafe_allow_html=True)
+
+        tier_col1, tier_col2, tier_col3 = st.columns(3)
+
+        with tier_col1:
+            st.markdown(
+                """
+                <div style="background-color: #064E3B; border-left: 4px solid #10B981; padding: 0.85rem; border-radius: 0.5rem;">
+                    <strong style="color: #A7F3D0;">🟢 Safe Tier (< 10.0 ppm*hr)</strong>
+                    <p style="font-size: 0.8rem; color: #D1FAE5; margin-top: 0.25rem; margin-bottom: 0;">
+                        Below 8-hr TWA limit. Safe for routine workplace operations.
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        with tier_col2:
+            st.markdown(
+                """
+                <div style="background-color: #78350F; border-left: 4px solid #F59E0B; padding: 0.85rem; border-radius: 0.5rem;">
+                    <strong style="color: #FDE68A;">🟡 Caution Tier (10 - 50 ppm*hr)</strong>
+                    <p style="font-size: 0.8rem; color: #FEF3C7; margin-top: 0.25rem; margin-bottom: 0;">
+                        Approaching safe limits. Recommended shift rotation / check.
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        with tier_col3:
+            st.markdown(
+                """
+                <div style="background-color: #7F1D1D; border-left: 4px solid #EF4444; padding: 0.85rem; border-radius: 0.5rem;">
+                    <strong style="color: #FCA5A5;">🔴 Unsafe Tier (≥ 50.0 ppm*hr)</strong>
+                    <p style="font-size: 0.8rem; color: #FEE2E2; margin-top: 0.25rem; margin-bottom: 0;">
+                        Exceeds safe limits. <b>Immediate work stoppage & medical review!</b>
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
         # Button is disabled until both valid worker_id and image are supplied
-        is_disabled = not (is_worker_id_valid and captured_image is not None)
+        is_disabled = not (is_worker_id_valid and image_bytes_to_process is not None)
 
         analyze_clicked = st.button(
             "🔍 Analyze", disabled=is_disabled, type="primary", use_container_width=True
         )
 
-        if analyze_clicked and captured_image is not None:
+        if analyze_clicked and image_bytes_to_process is not None:
             with st.spinner("Processing image through calibration & ML model..."):
                 try:
                     # Decode image buffer into OpenCV BGR numpy array
-                    file_bytes = np.frombuffer(captured_image.getvalue(), dtype=np.uint8)
+                    file_bytes = np.frombuffer(image_bytes_to_process, dtype=np.uint8)
                     raw_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
                     if raw_bgr is None:
@@ -315,15 +437,13 @@ elif page == "Scan Strip":
                     st.caption(f"ℹ️ **Confidence Note:** {confidence_note}")
 
                 except calibration.ReferenceScaleNotFoundError as e:
-                    # User-friendly warning when reference scale strip is missing/unreadable
                     st.warning(
                         "Could not detect the reference color scale — please retake the photo "
                         "making sure the full strip and reference scale are visible and well-lit."
                     )
                 except Exception as e:
-                    # General error resilience to avoid app crashes
                     print(f"[ERROR] Scan Analysis Failed: {e}", file=sys.stderr)
-                    st.error("Something went wrong analyzing this scan — please try again or contact support.")
+                    st.error(f"Something went wrong analyzing this scan ({e}) — please try again or contact support.")
 
 # -----------------------------------------------------------------------------
 # PAGE 3: DASHBOARD
@@ -402,25 +522,17 @@ elif page == "Dashboard":
         # -------------------------------------------------------------------------
         if selected_view == "All Workers":
             st.subheader("📊 Cumulative Dose per Worker (ppm * hr)")
-            cum_data = [
-                {
-                    "Worker ID": wid,
-                    "Cumulative Dose (ppm*hr)": database.get_cumulative_dose(wid),
-                }
-                for wid in unique_workers
-            ]
-            df_cum = pd.DataFrame(cum_data).set_index("Worker ID")
-            st.bar_chart(df_cum)
+            worker_totals = df_readings.groupby("worker_id")["dose"].sum()
+            st.bar_chart(worker_totals)
         else:
             st.subheader(
-                f"📈 Exposure Dose Timeline — Worker ID: {selected_view}"
+                f"📈 Cumulative Exposure Dose Timeline — Worker ID: {selected_view}"
             )
             df_worker = database.get_readings_for_worker(selected_view)
             df_worker["timestamp_dt"] = pd.to_datetime(df_worker["timestamp"])
             df_worker = df_worker.sort_values("timestamp_dt")
-            df_chart = df_worker.set_index("timestamp_dt")[["dose"]]
-            df_chart.columns = ["Dose (ppm*hr)"]
-            st.line_chart(df_chart)
+            df_worker["cumulative_dose"] = df_worker["dose"].cumsum()
+            st.line_chart(df_worker.set_index("timestamp_dt")["cumulative_dose"])
 
         st.divider()
 
@@ -462,12 +574,25 @@ elif page == "Dashboard":
 
         st.dataframe(df_table, use_container_width=True, hide_index=True)
 
-        # Export Button (Download readings as CSV)
-        csv_data = df_table.to_csv(index=False)
-        st.download_button(
-            label="📥 Download readings as CSV",
-            data=csv_data,
-            file_name=f"doseband_readings_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv",
-            type="primary",
-        )
+        col_export, col_reset = st.columns([2, 2], gap="large")
+
+        with col_export:
+            # Export Button (Download readings as CSV)
+            csv_data = df_table.to_csv(index=False)
+            st.download_button(
+                label="📥 Download readings as CSV",
+                data=csv_data,
+                file_name=f"doseband_readings_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                type="primary",
+            )
+
+        with col_reset:
+            st.markdown("##### 🗑️ Reset Demo Data")
+            confirm_reset = st.checkbox("Confirm clearing all logged database readings")
+            reset_btn = st.button("Clear Demo Data", disabled=not confirm_reset)
+
+            if reset_btn and confirm_reset:
+                database.reset_db()
+                st.success("Demo database reset successfully! All readings cleared.")
+                st.rerun()

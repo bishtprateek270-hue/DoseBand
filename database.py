@@ -54,6 +54,21 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
     conn.close()
 
 
+def reset_db(db_path: str = DEFAULT_DB_PATH) -> None:
+    """
+    Drops the 'readings' table and recreates an empty schema to clear demo data.
+
+    Args:
+        db_path (str): Filepath for the SQLite database.
+    """
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS readings;")
+    conn.commit()
+    conn.close()
+    init_db(db_path)
+
+
 def insert_reading(
     worker_id: str,
     intensity: float,

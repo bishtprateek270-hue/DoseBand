@@ -125,6 +125,7 @@ def train_model(
 def load_model(path: str = DEFAULT_MODEL_PATH) -> Tuple[LinearRegression, PolynomialFeatures]:
     """
     Loads serialized model and polynomial transformer from pickle file.
+    If the model file does not exist, automatically trains and serializes a new model.
 
     Args:
         path (str): Path to saved model pickle file.
@@ -133,9 +134,7 @@ def load_model(path: str = DEFAULT_MODEL_PATH) -> Tuple[LinearRegression, Polyno
         Tuple: (model, poly)
     """
     if not os.path.exists(path):
-        raise FileNotFoundError(
-            f"Model file '{path}' not found. Please run train_model() first."
-        )
+        train_model(csv_path=DEFAULT_DATA_PATH, model_path=path)
 
     with open(path, "rb") as f:
         data = pickle.load(f)
