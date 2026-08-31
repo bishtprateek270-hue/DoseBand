@@ -22,6 +22,11 @@ import dose_model
 import expiry_checker
 import generate_test_images
 import strip_reader
+import train_all_models
+
+# Train ML models on empirical calibration & expiry datasets at startup if missing
+if not os.path.exists("dose_model.pkl") or not os.path.exists("expiry_classifier.pkl"):
+    train_all_models.main()
 
 # Auto-generate annotated test images with box labels & gradient line indicators
 generate_test_images.generate_all_test_assets()
@@ -116,6 +121,36 @@ st.markdown(
         div[data-testid="stSidebar"] {
             background-color: #F1F5F9;
             border-right: 1px solid #E2E8F0;
+        }
+
+        /* Centered max-width container to prevent ultra-wide distortion at low zoom (25%) */
+        .block-container {
+            max-width: 1350px !important;
+            padding-top: 1.5rem !important;
+            padding-bottom: 2rem !important;
+            margin: 0 auto !important;
+        }
+
+        /* Responsive image preview constraints */
+        [data-testid="stImage"] {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+
+        [data-testid="stImage"] img {
+            max-height: 400px !important;
+            max-width: 100% !important;
+            object-fit: contain !important;
+            margin: 0 auto !important;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        }
+
+        /* Chart height and zoom responsiveness constraints */
+        [data-testid="stVegaLiteChart"], .stChart {
+            max-height: 380px !important;
+            max-width: 100% !important;
         }
     </style>
 """,

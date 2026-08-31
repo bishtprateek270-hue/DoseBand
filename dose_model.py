@@ -90,12 +90,12 @@ def train_model(
     df = pd.read_csv(csv_path)
 
     # Feature and Target extraction
-    X = df[["intensity"]].values
-    y = df["known_dose"].values
+    X_list = df[["intensity"]].values.tolist()
+    y_list = [float(val) for val in df["known_dose"].tolist()]
 
     # 80/20 Train-Test split
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
+        X_list, y_list, test_size=0.2, random_state=42
     )
 
     # Polynomial Features Transformer (Degree 2 mapping)
