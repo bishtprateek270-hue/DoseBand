@@ -25,6 +25,8 @@ import expiry_checker
 import generate_test_images
 import qr_manager
 importlib.reload(qr_manager)
+import quality_validator
+importlib.reload(quality_validator)
 import strip_reader
 import train_all_models
 
@@ -447,7 +449,8 @@ elif page == "Scan Strip":
                 image_bytes_to_process = camera_file.getvalue()
 
     with col2:
-        st.subheader("Step 3: Preview & Analysis")
+        is_quality_valid = False
+        quality_diag = None
 
         if image_bytes_to_process is not None:
             st.image(
@@ -455,6 +458,119 @@ elif page == "Scan Strip":
                 caption="Dosimeter Image Preview",
                 use_container_width=True,
             )
+
+            # Decode image buffer for pre-flight quality validation
+            file_bytes = np.frombuffer(image_bytes_to_process, dtype=np.uint8)
+            preview_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+            if preview_bgr is not None:
+                quality_diag = quality_validator.evaluate_image_quality(preview_bgr)
+                is_quality_valid = quality_diag["is_valid_for_analysis"]
+
+                # -------------------------------------------------------------
+                # SCAN QUALITY STATUS & REGION DETECTION DASHBOARD
+                # -------------------------------------------------------------
+                st.markdown("<h4 style='margin-top: 1.2rem; color: #F8FAFC;'>🔬 Pre-Flight Scan Quality & Region Detection</h4>", unsafe_allow_html=True)
+
+                # Quality Status Badge
+                q_status = quality_diag["quality_status"]
+                if q_status == "Good":
+                    status_badge_html = """
+                    <div style="background-color: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
+                        <span style="color: #34D399; font-weight: 700; font-size: 1rem;">🟢 Scan Quality: GOOD</span>
+                        <span style="color: #A7F3D0; font-size: 0.85rem;">All regions detected • Optimal focus & illumination</span>
+                    </div>
+                    """
+                elif q_status == "Acceptable":
+                    status_badge_html = """
+                    <div style="background-color: rgba(245, 158, 11, 0.15); border: 1px solid #F59E0B; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
+                        <span style="color: #FBBF24; font-weight: 700; font-size: 1rem;">🟡 Scan Quality: ACCEPTABLE</span>
+                        <span style="color: #FDE68A; font-size: 0.85rem;">All regions detected • Illumination correctable via OLS</span>
+                    </div>
+                    """
+                else:
+                    status_badge_html = """
+                    <div style="background-color: rgba(239, 68, 68, 0.15); border: 1px solid #EF4444; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
+                        <span style="color: #F87171; font-weight: 700; font-size: 1rem;">🔴 Scan Quality: RETAKE REQUIRED</span>
+                        <span style="color: #FCA5A5; font-size: 0.85rem;">Quality checks failed • Analysis blocked</span>
+                    </div>
+                    """
+                st.markdown(status_badge_html, unsafe_allow_html=True)
+
+                # 4 Core Indicator Cards
+                ind_col1, ind_col2, ind_col3, ind_col4 = st.columns(4)
+
+                with ind_col1:
+                    ref_ok = quality_diag["ref_scale_detected"]
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if ref_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
+                            <div style="font-size: 0.75rem; color: #94A3B8;">📌 Reference Scale</div>
+                            <strong style="color: {'#34D399' if ref_ok else '#F87171'}; font-size: 0.82rem;">
+                                {'✅ Detected (5 Swatches)' if ref_ok else '❌ Not Detected'}
+                            </strong>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                with ind_col2:
+                    strip_ok = quality_diag["sensor_strip_detected"]
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if strip_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
+                            <div style="font-size: 0.75rem; color: #94A3B8;">🧪 Sensor Strip</div>
+                            <strong style="color: {'#34D399' if strip_ok else '#F87171'}; font-size: 0.82rem;">
+                                {'✅ Detected (Active)' if strip_ok else '❌ Not Detected'}
+                            </strong>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                with ind_col3:
+                    expiry_ok = quality_diag["expiry_patch_detected"]
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if expiry_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
+                            <div style="font-size: 0.75rem; color: #94A3B8;">🛡️ Expiry Patch</div>
+                            <strong style="color: {'#34D399' if expiry_ok else '#F87171'}; font-size: 0.82rem;">
+                                {'✅ Detected (Patch)' if expiry_ok else '❌ Not Detected'}
+                            </strong>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                with ind_col4:
+                    calib_ok = quality_diag["calibration_successful"]
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if calib_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
+                            <div style="font-size: 0.75rem; color: #94A3B8;">💡 Lighting Calibration</div>
+                            <strong style="color: {'#34D399' if calib_ok else '#F87171'}; font-size: 0.82rem;">
+                                {'✅ Successful (OLS)' if calib_ok else '❌ Infeasible'}
+                            </strong>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                # Diagnostics Metric Chips
+                st.caption(
+                    f"📊 **Diagnostic Metrics:** Sharpness Score: `{quality_diag['sharpness_score']}` (min: 35.0) &nbsp;|&nbsp; "
+                    f"Mean Brightness: `{quality_diag['brightness_score']}/255` &nbsp;|&nbsp; "
+                    f"Contrast Std: `{quality_diag['contrast_score']}`"
+                )
+
+                # Quality Blocking Alerts or Warnings
+                if not is_quality_valid:
+                    st.error(
+                        "🚨 **Scan Analysis Blocked — Image Quality Issues Detected:**\n" +
+                        "\n".join([f"• {r}" for r in quality_diag["reasons"]])
+                    )
+                elif quality_diag["warnings"]:
+                    st.caption("ℹ️ " + " ".join(quality_diag["warnings"]))
         else:
             st.info("📷 Image preview will appear here after selecting a sample, uploading a file, or taking a photo.")
 
@@ -548,12 +664,15 @@ elif page == "Scan Strip":
                 unsafe_allow_html=True
             )
 
-        # Button is disabled until both valid worker_id and image are supplied
-        is_disabled = not (is_worker_id_valid and image_bytes_to_process is not None)
+        # Button is disabled until valid worker_id, image supplied, and image passes quality checks
+        is_disabled = not (is_worker_id_valid and image_bytes_to_process is not None and is_quality_valid)
 
         analyze_clicked = st.button(
             "🔍 Analyze", disabled=is_disabled, type="primary", use_container_width=True
         )
+
+        if not is_quality_valid and image_bytes_to_process is not None:
+            st.caption("🔒 *Analysis disabled: please resolve the image quality issues indicated above or upload a clearer photo.*")
 
         if analyze_clicked and image_bytes_to_process is not None:
             with st.spinner("Processing image through calibration & ML model..."):

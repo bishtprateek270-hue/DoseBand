@@ -219,7 +219,22 @@ def generate_all_test_assets() -> None:
     expired_img = create_base_dosimeter_image(expiry_hsv=expired_hsv)
     cv2.imwrite(os.path.join(OUTPUT_DIR, "expiry_expired.jpg"), expired_img)
 
-    print("\nSuccessfully updated all annotated test images!")
+    # 4. QUALITY VALIDATION TEST ASSETS
+    # Blurry image
+    blurry_img = cv2.GaussianBlur(base_bgr, (35, 35), 10.0)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "quality_test_blurry.jpg"), blurry_img)
+
+    # Underexposed dark image
+    dark_img = adjust_lighting(base_bgr, 0.08)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "quality_test_underexposed.jpg"), dark_img)
+
+    # Missing Reference Scale image (blanked left ROI)
+    no_scale_img = base_bgr.copy()
+    h_ns, w_ns = no_scale_img.shape[:2]
+    no_scale_img[:, :w_ns // 3] = (245, 245, 245)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "quality_test_missing_scale.jpg"), no_scale_img)
+
+    print("\nSuccessfully updated all annotated and quality test images!")
 
 
 if __name__ == "__main__":
