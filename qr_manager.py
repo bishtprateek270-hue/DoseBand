@@ -65,7 +65,7 @@ def generate_badge_qr_png(
 
     img = qr.make_image(fill_color="#0F172A", back_color="#FFFFFF")
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    img.save(buf)
     return buf.getvalue()
 
 
