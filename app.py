@@ -73,30 +73,42 @@ st.markdown(
         }
 
         .main-header {
-            font-size: 2.6rem;
+            font-size: 2.3rem;
             font-weight: 800;
-            color: #0F172A;
+            color: var(--text-color, #0F172A) !important;
+            margin-top: 0.2rem;
             margin-bottom: 0.2rem;
             letter-spacing: -0.02em;
         }
 
         .sub-header {
-            font-size: 1.15rem;
-            color: #475569;
-            margin-bottom: 1.5rem;
+            font-size: 1.05rem;
+            color: var(--text-color, #475569) !important;
+            opacity: 0.85;
+            margin-bottom: 1.2rem;
             font-weight: 500;
         }
 
         .brand-badge {
-            background-color: #FFEDD5;
-            color: #C2410C;
-            padding: 4px 14px;
-            border-radius: 9999px;
+            background-color: rgba(234, 88, 12, 0.12) !important;
+            color: #EA580C !important;
+            padding: 5px 14px !important;
+            border-radius: 9999px !important;
+            font-weight: 700 !important;
+            font-size: 0.8rem !important;
+            display: inline-block !important;
+            margin-top: 0.25rem !important;
+            margin-bottom: 0.6rem !important;
+            border: 1px solid rgba(234, 88, 12, 0.35) !important;
+            letter-spacing: 0.04em !important;
+        }
+
+        .section-header {
+            color: var(--text-color, inherit) !important;
+            font-size: 1.35rem;
             font-weight: 700;
-            font-size: 0.85rem;
-            display: inline-block;
-            margin-bottom: 1rem;
-            border: 1px solid #FDBA74;
+            margin-top: 1.2rem;
+            margin-bottom: 0.5rem;
         }
 
         .icon-card {
@@ -125,17 +137,11 @@ st.markdown(
             color: #94A3B8;
         }
 
-        /* Sidebar Styling */
-        div[data-testid="stSidebar"] {
-            background-color: #F1F5F9;
-            border-right: 1px solid #E2E8F0;
-        }
-
-        /* Centered max-width container to prevent ultra-wide distortion at low zoom (25%) */
+        /* Centered max-width container with generous top padding to clear Streamlit header bar */
         .block-container {
             max-width: 1350px !important;
-            padding-top: 1.5rem !important;
-            padding-bottom: 2rem !important;
+            padding-top: 4.5rem !important;
+            padding-bottom: 2.5rem !important;
             margin: 0 auto !important;
         }
 
@@ -515,7 +521,7 @@ elif page == "Scan Strip":
                 # -------------------------------------------------------------
                 # SCAN QUALITY STATUS & REGION DETECTION DASHBOARD
                 # -------------------------------------------------------------
-                st.markdown("<h4 style='margin-top: 1.2rem; color: #F8FAFC;'>🔬 Pre-Flight Scan Quality & Region Detection</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 class='section-header'>🔬 Pre-Flight Scan Quality & Region Detection</h4>", unsafe_allow_html=True)
 
                 # Quality Status Badge
                 q_status = quality_diag["quality_status"]
@@ -620,7 +626,7 @@ elif page == "Scan Strip":
             st.info("📷 Image preview will appear here after selecting a sample, uploading a file, or taking a photo.")
 
         # Image Region Block Boxes & Risk Level Cards
-        st.markdown("<h4 style='margin-top: 1rem; color: #F8FAFC;'>📌 Image Region (Box) Breakdown</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 class='section-header'>📌 Image Region (Box) Breakdown</h4>", unsafe_allow_html=True)
 
         box_col1, box_col2, box_col3 = st.columns(3)
 
@@ -666,7 +672,7 @@ elif page == "Scan Strip":
                 unsafe_allow_html=True
             )
 
-        st.markdown("<h4 style='margin-top: 1.5rem; color: #F8FAFC;'>⚠️ Exposure Risk Level Thresholds</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 class='section-header'>⚠️ Exposure Risk Level Thresholds</h4>", unsafe_allow_html=True)
 
         tier_col1, tier_col2, tier_col3 = st.columns(3)
 
@@ -805,7 +811,7 @@ elif page == "Scan Strip":
                     # -------------------------------------------------------------
                     # EXPERIMENTAL ENVIRONMENTAL COMPENSATION PANEL
                     # -------------------------------------------------------------
-                    st.markdown("<h4 style='margin-top: 1.4rem; color: #F8FAFC;'>🌡️ Prototype Environmental Compensation</h4>", unsafe_allow_html=True)
+                    st.markdown("<h4 class='section-header'>🌡️ Prototype Environmental Compensation</h4>", unsafe_allow_html=True)
 
                     st.markdown(
                         """
@@ -1514,7 +1520,7 @@ elif page == "Dashboard":
     # -------------------------------------------------------------------------
     # SECTION 2: WORKERS REQUIRING ATTENTION
     # -------------------------------------------------------------------------
-    st.markdown("<h3 style='color: #F8FAFC;'>🚨 Workers Requiring Attention</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 class='section-header'>🚨 Workers Requiring Attention</h3>", unsafe_allow_html=True)
     st.caption("Proactive supervisory action list prioritized by cumulative exposure severity and badge expiry condition.")
 
     if worker_attention_list:
@@ -1539,7 +1545,7 @@ elif page == "Dashboard":
     # -------------------------------------------------------------------------
     # SECTION 3: BADGE EXPIRY ALERTS
     # -------------------------------------------------------------------------
-    st.markdown("<h3 style='color: #F8FAFC;'>🛡️ Dosimeter Badge Expiry Alerts</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 class='section-header'>🛡️ Dosimeter Badge Expiry Alerts</h3>", unsafe_allow_html=True)
 
     if expiry_alerts_list:
         for alert in expiry_alerts_list:
@@ -1596,7 +1602,7 @@ elif page == "Dashboard":
     # -------------------------------------------------------------------------
     # SECTION 4: EXPOSURE ANALYTICS & TIMELINE CHARTS
     # -------------------------------------------------------------------------
-    st.markdown("<h3 style='color: #F8FAFC;'>📈 Exposure Trends & Worker Comparisons</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 class='section-header'>📈 Exposure Trends & Worker Comparisons</h3>", unsafe_allow_html=True)
 
     if df_readings.empty:
         st.info("ℹ️ No scan readings logged yet. Scan sensor strips to generate exposure charts.")
@@ -1668,7 +1674,7 @@ elif page == "Dashboard":
     # -------------------------------------------------------------------------
     # SECTION 5: LOGGED READINGS TABLE & CSV EXPORT
     # -------------------------------------------------------------------------
-    st.markdown("<h3 style='color: #F8FAFC;'>📋 Logged Dosimeter Readings & Environmental Data</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 class='section-header'>📋 Logged Dosimeter Readings & Environmental Data</h3>", unsafe_allow_html=True)
 
     if not df_readings.empty:
         if selected_view == "All Workers":
