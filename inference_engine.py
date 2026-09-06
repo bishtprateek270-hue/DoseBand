@@ -22,6 +22,7 @@ import cv2
 
 from calibration import calibrate_image, ReferenceScaleNotFoundError
 from roi_detector import detect_all_rois, extract_center_features, draw_roi_visual_overlay
+from strip_validator import validate_test_strip, INVALID_IMAGE_MESSAGE, UNCERTAIN_IMAGE_MESSAGE
 
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
 H2S_MODEL_PATH = os.path.join(MODELS_DIR, "h2s_demo_model.joblib")
@@ -126,6 +127,7 @@ class DoseBandInferencePipeline:
     ) -> Dict[str, Any]:
         """
         Executes end-to-end multi-ROI extraction, lighting compensation, and dual model inference.
+        Includes mandatory Test-Strip Validation stage.
 
         Args:
             image_bgr (np.ndarray): Uploaded badge photograph.
@@ -136,6 +138,24 @@ class DoseBandInferencePipeline:
         Returns:
             dict: Complete inference results and diagnostic metadata.
         """
+        # Step 0: Mandatory Test-Strip Validation Stage
+        val_res = validate_test_strip(image_bgr)
+        if not val_res["is_valid"]:
+            roi_detections = detect_all_rois(image_bgr)
+            annotated_overlay = draw_roi_visual_overlay(image_bgr, roi_detections)
+            return {
+                "is_valid": False,
+                "validation_status": val_res["status"],
+                "validation_score": val_res["validation_score"],
+                "confidence_pct": val_res["confidence_pct"],
+                "user_message": val_res["user_message"],
+                "rejection_reasons": val_res["rejection_reasons"],
+                "roi_detections": roi_detections,
+                "annotated_overlay": annotated_overlay,
+                "data_source": "VALIDATION_FAILED",
+                "disclaimer": PROTOTYPE_DISCLAIMER
+            }
+
         # 1. Lighting correction via reference scale
         calib_success = True
         try:
