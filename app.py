@@ -97,23 +97,23 @@ st.markdown(
 
         .sub-header {
             font-size: 1.05rem;
-            color: var(--text-color, #475569) !important;
-            opacity: 0.85;
+            color: var(--text-color, #334155) !important;
+            opacity: 0.95;
             margin-bottom: 1.2rem;
             font-weight: 500;
         }
 
         .brand-badge {
-            background-color: rgba(234, 88, 12, 0.12) !important;
+            background-color: rgba(234, 88, 12, 0.15) !important;
             color: #EA580C !important;
             padding: 5px 14px !important;
             border-radius: 9999px !important;
-            font-weight: 700 !important;
-            font-size: 0.8rem !important;
+            font-weight: 800 !important;
+            font-size: 0.82rem !important;
             display: inline-block !important;
             margin-top: 0.25rem !important;
             margin-bottom: 0.6rem !important;
-            border: 1px solid rgba(234, 88, 12, 0.35) !important;
+            border: 1.5px solid rgba(234, 88, 12, 0.45) !important;
             letter-spacing: 0.04em !important;
         }
 
@@ -141,14 +141,52 @@ st.markdown(
         }
 
         .icon-card h3 {
-            color: #F97316;
-            font-weight: 700;
+            color: #FB923C;
+            font-weight: 800;
             margin-bottom: 0.5rem;
         }
 
         .icon-card p {
             font-size: 1.05rem;
-            color: #94A3B8;
+            color: #E2E8F0;
+        }
+
+        /* Streamlit Metric card readability and anti-truncation */
+        [data-testid="stMetricValue"] {
+            font-size: 1.6rem !important;
+            font-weight: 800 !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+            line-height: 1.2 !important;
+        }
+
+        [data-testid="stMetricLabel"] {
+            font-size: 0.90rem !important;
+            font-weight: 700 !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+            color: var(--text-color, #1E293B) !important;
+        }
+
+        [data-testid="stMetricDelta"] {
+            font-weight: 700 !important;
+            white-space: normal !important;
+            font-size: 0.82rem !important;
+        }
+
+        /* High-contrast captions & subtitle texts */
+        [data-testid="stCaptionContainer"], .stCaption {
+            font-size: 0.86rem !important;
+            font-weight: 500 !important;
+            color: var(--text-color, #334155) !important;
+            opacity: 0.95 !important;
+        }
+
+        /* High-contrast code tags */
+        code {
+            font-weight: 700 !important;
+            padding: 2px 6px !important;
+            border-radius: 4px !important;
         }
 
         /* Centered max-width container with generous top padding to clear Streamlit header bar */
@@ -344,17 +382,17 @@ elif page == "Scan Strip":
                         # Rich Verified Profile Badge Card
                         st.markdown(
                             f"""
-                            <div style="background-color: #1E293B; border-left: 4px solid #10B981; padding: 0.85rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem;">
+                            <div style="background-color: #1E293B; border-left: 4px solid #10B981; padding: 0.85rem 1rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; border: 1px solid #334155;">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <strong style="color: #F8FAFC; font-size: 0.95rem;">👤 {w_info['name']} ({w_info['worker_id']})</strong>
-                                    <span style="background-color: rgba(16, 185, 129, 0.2); color: #10B981; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                    <strong style="color: #FFFFFF; font-size: 1rem;">👤 {w_info['name']} ({w_info['worker_id']})</strong>
+                                    <span style="background-color: #10B981; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 3px 10px; border-radius: 9999px; letter-spacing: 0.03em;">
                                         QR VERIFIED • ACTIVE
                                     </span>
                                 </div>
-                                <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 0.4rem; line-height: 1.4;">
-                                    🏭 <b>Dept:</b> {w_info['department']} &nbsp;|&nbsp; 📍 <b>Zone:</b> {w_info['work_zone']}<br>
-                                    ⏰ <b>Shift:</b> {w_info['shift']}<br>
-                                    🏷️ <b>Badge ID:</b> <code style="color: #F97316;">{w_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b>Expiry:</b> {w_info['badge_expiry_date']}
+                                <div style="font-size: 0.86rem; color: #E2E8F0; margin-top: 0.45rem; line-height: 1.5;">
+                                    🏭 <b style="color: #FFFFFF;">Dept:</b> {w_info['department']} &nbsp;|&nbsp; 📍 <b style="color: #FFFFFF;">Zone:</b> {w_info['work_zone']}<br>
+                                    ⏰ <b style="color: #FFFFFF;">Shift:</b> {w_info['shift']}<br>
+                                    🏷️ <b style="color: #FFFFFF;">Badge ID:</b> <code style="color: #FB923C; background-color: #0F172A; padding: 2px 6px; border-radius: 4px; font-weight: 700;">{w_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b style="color: #FFFFFF;">Expiry:</b> {w_info['badge_expiry_date']}
                                 </div>
                             </div>
                             """,
@@ -408,17 +446,17 @@ elif page == "Scan Strip":
 
                     st.markdown(
                         f"""
-                        <div style="background-color: #1E293B; border-left: 4px solid {status_badge_color}; padding: 0.85rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem;">
+                        <div style="background-color: #1E293B; border-left: 4px solid {status_badge_color}; padding: 0.85rem 1rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; border: 1px solid #334155;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <strong style="color: #F8FAFC; font-size: 0.95rem;">👤 {worker_info['name']} ({worker_info['worker_id']})</strong>
-                                <span style="background-color: {'rgba(16, 185, 129, 0.2)' if not is_badge_date_expired and is_worker_active else 'rgba(239, 68, 68, 0.2)'}; color: {status_badge_color}; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                <strong style="color: #FFFFFF; font-size: 1rem;">👤 {worker_info['name']} ({worker_info['worker_id']})</strong>
+                                <span style="background-color: {status_badge_color}; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 3px 10px; border-radius: 9999px; letter-spacing: 0.03em;">
                                     {status_label.upper()}
                                 </span>
                             </div>
-                            <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 0.4rem; line-height: 1.4;">
-                                🏭 <b>Dept:</b> {worker_info['department']} &nbsp;|&nbsp; 📍 <b>Zone:</b> {worker_info['work_zone']}<br>
-                                ⏰ <b>Shift:</b> {worker_info['shift']}<br>
-                                🏷️ <b>Badge ID:</b> <code style="color: #F97316;">{worker_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b>Expiry:</b> {worker_info['badge_expiry_date']}
+                            <div style="font-size: 0.86rem; color: #E2E8F0; margin-top: 0.45rem; line-height: 1.5;">
+                                🏭 <b style="color: #FFFFFF;">Dept:</b> {worker_info['department']} &nbsp;|&nbsp; 📍 <b style="color: #FFFFFF;">Zone:</b> {worker_info['work_zone']}<br>
+                                ⏰ <b style="color: #FFFFFF;">Shift:</b> {worker_info['shift']}<br>
+                                🏷️ <b style="color: #FFFFFF;">Badge ID:</b> <code style="color: #FB923C; background-color: #0F172A; padding: 2px 6px; border-radius: 4px; font-weight: 700;">{worker_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b style="color: #FFFFFF;">Expiry:</b> {worker_info['badge_expiry_date']}
                             </div>
                         </div>
                         """,
@@ -465,7 +503,14 @@ elif page == "Scan Strip":
                 if os.path.exists(sample_filepath):
                     with open(sample_filepath, "rb") as f:
                         image_bytes_to_process = f.read()
-                    st.caption(f"📁 Loaded sample asset: `{sample_filename}`")
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid #10B981; padding: 0.4rem 0.75rem; border-radius: 0.35rem; margin-top: 0.35rem; font-size: 0.84rem; color: #F1F5F9;">
+                            📁 <b>Loaded Sample Asset:</b> <code style="color: #34D399; background-color: #0F172A; padding: 2px 6px; border-radius: 4px; font-weight: 700;">{sample_filename}</code>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
             else:
                 uploaded_file = st.file_uploader("Upload Image File", type=["jpg", "jpeg", "png"])
                 if uploaded_file is not None:
@@ -520,9 +565,11 @@ elif page == "Scan Strip":
             else:
                 st.markdown(
                     """
-                    <div style="background-color: #1E293B; border-left: 3px solid #38BDF8; padding: 0.5rem 0.75rem; border-radius: 0.35rem; margin-top: 0.25rem;">
-                        <span style="font-size: 0.8rem; color: #94A3B8;">KNN Indicator Card Model:</span><br/>
-                        <span style="font-size: 0.78rem; color: #E0F2FE;">Relative humidity will be dynamically extracted and classified from the circular humidity card on the badge.</span>
+                    <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid #38BDF8; padding: 0.6rem 0.85rem; border-radius: 0.4rem; margin-top: 0.35rem;">
+                        <strong style="font-size: 0.84rem; color: #38BDF8;">KNN Indicator Card Model:</strong><br/>
+                        <span style="font-size: 0.82rem; color: #F1F5F9; line-height: 1.4; display: inline-block; margin-top: 2px;">
+                            Relative humidity will be dynamically extracted and classified from the circular humidity card on the badge.
+                        </span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -536,10 +583,10 @@ elif page == "Scan Strip":
 
         st.markdown(
             f"""
-            <div style="background-color: #1E293B; border-left: 3px solid {cf_color}; padding: 0.5rem 0.75rem; border-radius: 0.35rem; margin-top: 0.5rem; margin-bottom: 0.75rem;">
-                <span style="font-size: 0.8rem; color: #94A3B8;">Prototype Kinetic Factor (CF):</span>
-                <strong style="color: {cf_color}; font-size: 0.9rem; margin-left: 0.5rem;">{live_cf:.4f}</strong>
-                <span style="font-size: 0.75rem; color: #CBD5E1; margin-left: 0.4rem;">({'+' if cf_pct_diff >= 0 else ''}{cf_pct_diff:.1f}% vs 25°C/50% RH)</span>
+            <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid {cf_color}; padding: 0.55rem 0.85rem; border-radius: 0.4rem; margin-top: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 0.83rem; color: #E2E8F0; font-weight: 600;">Prototype Kinetic Factor (CF):</span>
+                <strong style="color: {cf_color}; font-size: 0.95rem; margin-left: 0.5rem;">{live_cf:.4f}</strong>
+                <span style="font-size: 0.78rem; color: #CBD5E1; margin-left: 0.4rem; font-weight: 600;">({'+' if cf_pct_diff >= 0 else ''}{cf_pct_diff:.1f}% vs 25°C/50% RH)</span>
             </div>
             """,
             unsafe_allow_html=True
@@ -601,38 +648,38 @@ elif page == "Scan Strip":
 
                 if strip_val_status == "Valid":
                     strip_badge_html = f"""
-                    <div style="background-color: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; border-left: 4px solid #10B981; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
+                    <div style="background-color: #1E293B; border: 1px solid #10B981; border-left: 4px solid #10B981; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
                         <div>
                             <strong style="color: #34D399; font-size: 1rem;">🟢 Test Strip: VALID ({strip_val_pct}%)</strong>
-                            <div style="color: #A7F3D0; font-size: 0.82rem; margin-top: 2px;">DoseBand H₂S badge structure & 5-step reference scale verified.</div>
+                            <div style="color: #F1F5F9; font-size: 0.84rem; margin-top: 2px;">DoseBand H₂S badge structure & 5-step reference scale verified.</div>
                         </div>
-                        <span style="background-color: #10B981; color: #FFFFFF; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 9999px;">
+                        <span style="background-color: #10B981; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px; letter-spacing: 0.03em;">
                             VERIFIED BADGE
                         </span>
                     </div>
                     """
                 elif strip_val_status == "Uncertain":
                     strip_badge_html = f"""
-                    <div style="background-color: rgba(245, 158, 11, 0.15); border: 1px solid #F59E0B; border-left: 4px solid #F59E0B; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.75rem;">
+                    <div style="background-color: #1E293B; border: 1px solid #F59E0B; border-left: 4px solid #F59E0B; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.75rem;">
                         <div style="display: flex; align-items: center; justify-content: space-between;">
                             <strong style="color: #FBBF24; font-size: 1rem;">🟡 Test Strip: UNCERTAIN ({strip_val_pct}%)</strong>
-                            <span style="background-color: #F59E0B; color: #FFFFFF; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 9999px;">
+                            <span style="background-color: #F59E0B; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px; letter-spacing: 0.03em;">
                                 RETAKE RECOMMENDED
                             </span>
                         </div>
-                        <div style="color: #FDE68A; font-size: 0.82rem; margin-top: 4px;">{strip_val_res['user_message']}</div>
+                        <div style="color: #FEF3C7; font-size: 0.84rem; margin-top: 4px;">{strip_val_res['user_message']}</div>
                     </div>
                     """
                 else:
                     strip_badge_html = f"""
-                    <div style="background-color: rgba(239, 68, 68, 0.15); border: 1px solid #EF4444; border-left: 4px solid #EF4444; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.75rem;">
+                    <div style="background-color: #1E293B; border: 1px solid #EF4444; border-left: 4px solid #EF4444; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.75rem;">
                         <div style="display: flex; align-items: center; justify-content: space-between;">
                             <strong style="color: #F87171; font-size: 1rem;">🔴 Test Strip: INVALID ({strip_val_pct}%)</strong>
-                            <span style="background-color: #EF4444; color: #FFFFFF; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 9999px;">
+                            <span style="background-color: #EF4444; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px; letter-spacing: 0.03em;">
                                 UNSUPPORTED IMAGE
                             </span>
                         </div>
-                        <div style="color: #FCA5A5; font-size: 0.82rem; margin-top: 4px;">{strip_val_res['user_message']}</div>
+                        <div style="color: #FEE2E2; font-size: 0.84rem; margin-top: 4px;">{strip_val_res['user_message']}</div>
                     </div>
                     """
                 st.markdown(strip_badge_html, unsafe_allow_html=True)
@@ -654,9 +701,9 @@ elif page == "Scan Strip":
                 with ind_col1:
                     st.markdown(
                         f"""
-                        <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if ref_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
-                            <div style="font-size: 0.75rem; color: #94A3B8;">📌 Reference Scale</div>
-                            <strong style="color: {'#34D399' if ref_ok else '#F87171'}; font-size: 0.82rem;">
+                        <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid {'#10B981' if ref_ok else '#EF4444'}; padding: 0.65rem 0.8rem; border-radius: 0.4rem;">
+                            <div style="font-size: 0.76rem; color: #CBD5E1; font-weight: 600;">📌 Reference Scale</div>
+                            <strong style="color: {'#4ADE80' if ref_ok else '#F87171'}; font-size: 0.85rem;">
                                 {'✅ Monotonic (5-Step)' if ref_ok else '❌ Missing / Invalid'}
                             </strong>
                         </div>
@@ -667,9 +714,9 @@ elif page == "Scan Strip":
                 with ind_col2:
                     st.markdown(
                         f"""
-                        <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if strip_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
-                            <div style="font-size: 0.75rem; color: #94A3B8;">🧪 H2S Sensor Strip</div>
-                            <strong style="color: {'#34D399' if strip_ok else '#F87171'}; font-size: 0.82rem;">
+                        <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid {'#10B981' if strip_ok else '#EF4444'}; padding: 0.65rem 0.8rem; border-radius: 0.4rem;">
+                            <div style="font-size: 0.76rem; color: #CBD5E1; font-weight: 600;">🧪 H2S Sensor Strip</div>
+                            <strong style="color: {'#4ADE80' if strip_ok else '#F87171'}; font-size: 0.85rem;">
                                 {'✅ Verified Paper' if strip_ok else '❌ Rejected'}
                             </strong>
                         </div>
@@ -680,9 +727,9 @@ elif page == "Scan Strip":
                 with ind_col3:
                     st.markdown(
                         f"""
-                        <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if hum_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
-                            <div style="font-size: 0.75rem; color: #94A3B8;">💧 Humidity Source</div>
-                            <strong style="color: {'#34D399' if hum_ok else '#F87171'}; font-size: 0.82rem;">
+                        <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid {'#10B981' if hum_ok else '#EF4444'}; padding: 0.65rem 0.8rem; border-radius: 0.4rem;">
+                            <div style="font-size: 0.76rem; color: #CBD5E1; font-weight: 600;">💧 Humidity Source</div>
+                            <strong style="color: {'#4ADE80' if hum_ok else '#F87171'}; font-size: 0.85rem;">
                                 {'✅ Card Detected' if (humidity_input_mode.startswith('🤖') and hum_ok) else ('✅ Manual Set' if hum_ok else '❌ Not Available')}
                             </strong>
                         </div>
@@ -693,9 +740,9 @@ elif page == "Scan Strip":
                 with ind_col4:
                     st.markdown(
                         f"""
-                        <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if calib_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
-                            <div style="font-size: 0.75rem; color: #94A3B8;">💡 Lighting Calibration</div>
-                            <strong style="color: {'#34D399' if calib_ok else '#F87171'}; font-size: 0.82rem;">
+                        <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid {'#10B981' if calib_ok else '#EF4444'}; padding: 0.65rem 0.8rem; border-radius: 0.4rem;">
+                            <div style="font-size: 0.76rem; color: #CBD5E1; font-weight: 600;">💡 Lighting Calibration</div>
+                            <strong style="color: {'#4ADE80' if calib_ok else '#F87171'}; font-size: 0.85rem;">
                                 {'✅ Feasible (OLS)' if calib_ok else '❌ Infeasible'}
                             </strong>
                         </div>
@@ -759,9 +806,9 @@ elif page == "Scan Strip":
                     # Mandatory Prototype Disclaimer Banner
                     st.markdown(
                         f"""
-                        <div style="background-color: rgba(234, 88, 12, 0.12); border: 1px solid #EA580C; border-left: 4px solid #EA580C; border-radius: 0.5rem; padding: 0.85rem 1rem; margin-top: 1rem; margin-bottom: 1rem;">
-                            <strong style="color: #F97316; font-size: 0.95rem;">⚠️ PROTOTYPE ESTIMATE DISCLAIMER</strong>
-                            <p style="font-size: 0.84rem; color: #FED7AA; margin-top: 0.35rem; margin-bottom: 0;">
+                        <div style="background-color: #1E293B; border: 1px solid #EA580C; border-left: 4px solid #EA580C; border-radius: 0.5rem; padding: 0.85rem 1rem; margin-top: 1rem; margin-bottom: 1rem;">
+                            <strong style="color: #FB923C; font-size: 0.95rem;">⚠️ PROTOTYPE ESTIMATE DISCLAIMER</strong>
+                            <p style="font-size: 0.85rem; color: #F1F5F9; margin-top: 0.35rem; margin-bottom: 0; line-height: 1.4;">
                                 {inference_engine.PROTOTYPE_DISCLAIMER}
                             </p>
                         </div>
@@ -878,25 +925,30 @@ elif page == "Scan Strip":
                             )
 
                         # Environmental & Reliability Context Line
-                        st.caption(
-                            f"🌡️ **Ambient Temperature (Manual / Demo):** `{ambient_temp:.1f} °C` &nbsp;|&nbsp; "
-                            f"⏱️ **Shift Duration:** `{exposure_time:.1f} hrs` &nbsp;|&nbsp; "
-                            f"💧 **Humidity Source:** `{inf_res['humidity_source']}` &nbsp;|&nbsp; "
-                            f"🛡️ **Scan Confidence:** `{inf_res.get('reliability_label', 'High Reliability')} ({inf_res.get('confidence_pct', 95)}%)`"
+                        st.markdown(
+                            f"""
+                            <div style="background-color: #1E293B; color: #F1F5F9; border: 1px solid #334155; border-left: 3px solid #38BDF8; padding: 0.6rem 0.9rem; border-radius: 0.4rem; font-size: 0.84rem; margin-top: 0.6rem; margin-bottom: 0.75rem;">
+                                🌡️ <b style="color: #FFFFFF;">Ambient Temp:</b> <code style="color: #38BDF8; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{ambient_temp:.1f} °C</code> &nbsp;|&nbsp; 
+                                ⏱️ <b style="color: #FFFFFF;">Shift Duration:</b> <code style="color: #FBBF24; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{exposure_time:.1f} hrs</code> &nbsp;|&nbsp; 
+                                💧 <b style="color: #FFFFFF;">Humidity Source:</b> <code style="color: #34D399; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{inf_res['humidity_source']}</code> &nbsp;|&nbsp; 
+                                🛡️ <b style="color: #FFFFFF;">Scan Confidence:</b> <code style="color: #C084FC; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{inf_res.get('reliability_label', 'High Reliability')} ({inf_res.get('confidence_pct', 95)}%)</code>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
                         )
 
                         # Risk Level Banner (Evaluated only after valid prediction on unexpired badge)
                         st.markdown(
                             f"""
-                            <div style="background-color: #1E293B; border-left: 4px solid {inf_res['risk_color']}; padding: 0.85rem; border-radius: 0.5rem; margin-top: 0.75rem; margin-bottom: 0.75rem;">
+                            <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 4px solid {inf_res['risk_color']}; padding: 0.85rem 1rem; border-radius: 0.5rem; margin-top: 0.75rem; margin-bottom: 0.75rem;">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <strong style="color: #F8FAFC; font-size: 1rem;">🛡️ Risk Classification: <span style="color: {inf_res['risk_color']};">{inf_res['risk_level']}</span></strong>
-                                    <span style="background-color: {inf_res['risk_color']}33; color: {inf_res['risk_color']}; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                    <strong style="color: #FFFFFF; font-size: 1rem;">🛡️ Risk Classification: <span style="color: {inf_res['risk_color']}; font-weight: 800;">{inf_res['risk_level']}</span></strong>
+                                    <span style="background-color: {inf_res['risk_color']}; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 4px 12px; border-radius: 4px; letter-spacing: 0.05em;">
                                         {inf_res['risk_level'].upper()}
                                     </span>
                                 </div>
-                                <p style="font-size: 0.83rem; color: #CBD5E1; margin-top: 0.35rem; margin-bottom: 0;">
-                                    📋 {inf_res['action_guidance']}
+                                <p style="font-size: 0.85rem; color: #F1F5F9; margin-top: 0.4rem; margin-bottom: 0; line-height: 1.4;">
+                                    📋 <b style="color: #FFFFFF;">Action Guidance:</b> {inf_res['action_guidance']}
                                 </p>
                             </div>
                             """,
@@ -919,9 +971,15 @@ elif page == "Scan Strip":
                         if h2s_crop.size > 0:
                             st.image(cv2.cvtColor(h2s_crop, cv2.COLOR_BGR2RGB), caption="Detected H2S Sensor Strip ROI (Center Sampled)", use_container_width=True)
                         h_feat = inf_res["h2s_features"]
-                        st.caption(
-                            f"🎨 **H2S Optical Features:** RGB: `({h_feat['mean_r']:.1f}, {h_feat['mean_g']:.1f}, {h_feat['mean_b']:.1f})` | "
-                            f"HSV: `(H={h_feat['hue']:.1f}, S={h_feat['sat']:.1f}, V={h_feat['val']:.1f})` | Grayscale: `{h_feat['gray']:.1f}`"
+                        st.markdown(
+                            f"""
+                            <div style="background-color: #0F172A; color: #E2E8F0; padding: 0.6rem 0.85rem; border-radius: 0.4rem; font-size: 0.82rem; margin-top: 0.35rem; border: 1px solid #334155;">
+                                🎨 <b style="color: #FFFFFF;">H2S Optical Features:</b> RGB: <code style="color: #38BDF8; background-color: #1E293B; padding: 1px 5px; border-radius: 3px;">({h_feat['mean_r']:.1f}, {h_feat['mean_g']:.1f}, {h_feat['mean_b']:.1f})</code> &nbsp;|&nbsp; 
+                                HSV: <code style="color: #F472B6; background-color: #1E293B; padding: 1px 5px; border-radius: 3px;">(H={h_feat['hue']:.1f}, S={h_feat['sat']:.1f}, V={h_feat['val']:.1f})</code> &nbsp;|&nbsp; 
+                                Grayscale: <code style="color: #FBBF24; background-color: #1E293B; padding: 1px 5px; border-radius: 3px;">{h_feat['gray']:.1f}</code>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
                         )
 
                     with roi_v_col2:
@@ -930,9 +988,14 @@ elif page == "Scan Strip":
                         if hum_crop.size > 0:
                             st.image(cv2.cvtColor(hum_crop, cv2.COLOR_BGR2RGB), caption="Detected Humidity Card ROI (Central Disc)", use_container_width=True)
                         u_feat = inf_res["humidity_features"]
-                        st.caption(
-                            f"💧 **Humidity Optical Features:** RGB: `({u_feat['mean_r']:.1f}, {u_feat['mean_g']:.1f}, {u_feat['mean_b']:.1f})` | "
-                            f"HSV: `(H={u_feat['hue']:.1f}, S={u_feat['sat']:.1f}, V={u_feat['val']:.1f})`"
+                        st.markdown(
+                            f"""
+                            <div style="background-color: #0F172A; color: #E2E8F0; padding: 0.6rem 0.85rem; border-radius: 0.4rem; font-size: 0.82rem; margin-top: 0.35rem; border: 1px solid #334155;">
+                                💧 <b style="color: #FFFFFF;">Humidity Optical Features:</b> RGB: <code style="color: #38BDF8; background-color: #1E293B; padding: 1px 5px; border-radius: 3px;">({u_feat['mean_r']:.1f}, {u_feat['mean_g']:.1f}, {u_feat['mean_b']:.1f})</code> &nbsp;|&nbsp; 
+                                HSV: <code style="color: #F472B6; background-color: #1E293B; padding: 1px 5px; border-radius: 3px;">(H={u_feat['hue']:.1f}, S={u_feat['sat']:.1f}, V={u_feat['val']:.1f})</code>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
                         )
 
                 except Exception as e:
@@ -1619,9 +1682,9 @@ elif page == "Dashboard":
     # Disclaimer / Estimation Note
     st.markdown(
         """
-        <div style="background-color: rgba(59, 130, 246, 0.1); border-left: 4px solid #3B82F6; padding: 0.75rem 1rem; border-radius: 0.4rem; margin-bottom: 0.85rem;">
-            <span style="color: #60A5FA; font-weight: 700; font-size: 0.85rem;">ℹ️ STATISTICAL PROJECTION NOTICE:</span>
-            <span style="font-size: 0.82rem; color: var(--text-color, #94A3B8); margin-left: 0.35rem;">
+        <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 4px solid #3B82F6; padding: 0.75rem 1rem; border-radius: 0.4rem; margin-bottom: 0.85rem;">
+            <strong style="color: #60A5FA; font-weight: 800; font-size: 0.88rem;">ℹ️ STATISTICAL PROJECTION NOTICE:</strong>
+            <span style="font-size: 0.84rem; color: #F1F5F9; margin-left: 0.35rem; line-height: 1.4;">
                 Exposure forecasts are mathematical estimations calculated strictly from real chronological SQLite scan intervals.
                 Predictions require a minimum of 2 historical readings per worker to establish a valid accumulation slope.
             </span>
@@ -1880,17 +1943,17 @@ elif page == "Dashboard":
         # Executive Report Summary Box
         st.markdown(
             f"""
-            <div style="background-color: #1E293B; border-left: 4px solid {report_data['compliance_color']}; padding: 1rem 1.25rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.85rem;">
+            <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 4px solid {report_data['compliance_color']}; padding: 1rem 1.25rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.85rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <strong style="color: #F8FAFC; font-size: 1rem;">🛡️ {report_data['report_id']}</strong>
-                    <span style="background-color: rgba(255,255,255,0.1); color: {report_data['compliance_color']}; font-weight: 700; font-size: 0.78rem; padding: 3px 10px; border-radius: 4px;">
+                    <strong style="color: #FFFFFF; font-size: 1.05rem;">🛡️ {report_data['report_id']}</strong>
+                    <span style="background-color: {report_data['compliance_color']}; color: #FFFFFF; font-weight: 800; font-size: 0.80rem; padding: 4px 12px; border-radius: 4px; letter-spacing: 0.03em;">
                         {report_data['overall_compliance']}
                     </span>
                 </div>
-                <div style="font-size: 0.84rem; color: #94A3B8; margin-top: 0.4rem; line-height: 1.5;">
-                    📌 <b>Scope:</b> {report_data['worker_filter']} &nbsp;|&nbsp; 
-                    📅 <b>Period:</b> {report_data['start_date']} to {report_data['end_date']} &nbsp;|&nbsp; 
-                    ⏰ <b>Generated:</b> {report_data['generated_at']}
+                <div style="font-size: 0.86rem; color: #E2E8F0; margin-top: 0.45rem; line-height: 1.5;">
+                    📌 <b style="color: #FFFFFF;">Scope:</b> {report_data['worker_filter']} &nbsp;|&nbsp; 
+                    📅 <b style="color: #FFFFFF;">Period:</b> {report_data['start_date']} to {report_data['end_date']} &nbsp;|&nbsp; 
+                    ⏰ <b style="color: #FFFFFF;">Generated:</b> {report_data['generated_at']}
                 </div>
             </div>
             """,
