@@ -1347,30 +1347,265 @@ elif page == "Workers":
 # PAGE 4: DASHBOARD
 # -----------------------------------------------------------------------------
 elif page == "Dashboard":
-    # Note: Designed to mirror DGMS/OISD-style occupational health reporting formats for industrial safety compliance.
-    st.title("📊 Occupational Health & Exposure Dashboard")
-    st.caption(
-        "DGMS/OISD compliant H₂S exposure monitoring, cumulative dose"
-        " tracking, and badge expiry status."
+    # Designed to mirror DGMS/OISD occupational health reporting standards for real-time hazardous gas monitoring.
+    st.markdown("<span class='brand-badge'>PLANT OCCUPATIONAL SAFETY CONSOLE</span>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-header'>📊 Industrial Health & Safety Dashboard</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<p class='sub-header'>Real-time H₂S occupational dosimetry monitoring, cumulative exposure limits (DGMS / OISD), "
+        "and proactive badge shelf-life tracking across plant zones.</p>",
+        unsafe_allow_html=True,
     )
 
-    # Fetch all logged database records
+    # Fetch live data directly from SQLite database
+    df_workers = database.get_all_workers()
     df_readings = database.get_all_readings()
+    today_date = date.today()
+
+    # Collect all unique registered / scanned worker IDs
+    worker_ids = set()
+    if not df_workers.empty:
+        worker_ids.update(df_workers["worker_id"].tolist())
+    if not df_readings.empty:
+        worker_ids.update(df_readings["worker_id"].tolist())
+
+    worker_attention_list = []
+    expiry_alerts_list = []
+    safe_count = 0
+    warning_count = 0
+    critical_count = 0
+    near_expiry_count = 0
+
+    for wid in sorted(list(worker_ids)):
+        w_profile = database.get_worker_by_id(wid) if not df_workers.empty else None
+        w_name = w_profile["name"] if w_profile else f"Worker {wid}"
+        w_zone = w_profile["work_zone"] if w_profile else "Unassigned Unit"
+        w_dept = w_profile["department"] if w_profile else "Operations"
+        w_badge = w_profile["badge_id"] if w_profile else "N/A"
+        w_status = w_profile["status"] if w_profile else "Active"
+        exp_date_str = w_profile["badge_expiry_date"] if w_profile else None
+
+        cum_dose = database.get_cumulative_dose(wid)
+
+        is_badge_expired = False
+        is_near_expiry = False
+        days_left = 999
+        badge_status_text = "✅ Active"
+
+        if exp_date_str:
+            try:
+                exp_date_val = datetime.strptime(exp_date_str, "%Y-%m-%d").date()
+                days_left = (exp_date_val - today_date).days
+                if exp_date_val < today_date or w_status != "Active":
+                    is_badge_expired = True
+                    badge_status_text = f"❌ EXPIRED ({abs(days_left)}d ago)" if exp_date_val < today_date else f"⏸️ {w_status}"
+                    expiry_alerts_list.append({
+                        "worker_id": wid,
+                        "name": w_name,
+                        "badge_id": w_badge,
+                        "dept": w_dept,
+                        "zone": w_zone,
+                        "expiry_date": exp_date_str,
+                        "days_left": days_left,
+                        "severity": "EXPIRED"
+                    })
+                elif days_left <= 7:
+                    is_near_expiry = True
+                    badge_status_text = f"⏳ Expiring ({days_left}d left)"
+                    expiry_alerts_list.append({
+                        "worker_id": wid,
+                        "name": w_name,
+                        "badge_id": w_badge,
+                        "dept": w_dept,
+                        "zone": w_zone,
+                        "expiry_date": exp_date_str,
+                        "days_left": days_left,
+                        "severity": "EXPIRING_SOON"
+                    })
+            except Exception:
+                pass
+
+        if is_badge_expired or is_near_expiry:
+            near_expiry_count += 1
+
+        latest_risk = "None"
+        if not df_readings.empty:
+            w_reads = df_readings[df_readings["worker_id"] == wid]
+            if not w_reads.empty:
+                latest_risk = w_reads.iloc[0]["risk_level"]
+
+        # Risk Classification Logic
+        if cum_dose >= UNSAFE_CUMULATIVE_THRESHOLD or latest_risk.startswith("Unsafe"):
+            risk_status = "🔴 CRITICAL"
+            action_needed = "🚨 Medical review & work stoppage"
+            critical_count += 1
+            requires_attention = True
+            priority_rank = 1
+        elif is_badge_expired:
+            risk_status = "🔴 BADGE EXPIRED"
+            action_needed = "🛑 Prohibit entry; replace dosimeter badge"
+            critical_count += 1
+            requires_attention = True
+            priority_rank = 2
+        elif cum_dose >= 10.0 or is_near_expiry or latest_risk.startswith("Caution"):
+            risk_status = "🟡 WARNING"
+            action_needed = "⚠️ Shift rotation / swap badge"
+            warning_count += 1
+            requires_attention = True
+            priority_rank = 3
+        else:
+            risk_status = "🟢 SAFE"
+            action_needed = "Routine monitoring"
+            safe_count += 1
+            requires_attention = False
+            priority_rank = 4
+
+        if requires_attention:
+            worker_attention_list.append({
+                "Priority": priority_rank,
+                "Worker ID": wid,
+                "Name": w_name,
+                "Work Zone": w_zone,
+                "Cumulative Dose": f"{cum_dose:.2f} ppm*hr",
+                "Risk Status": risk_status,
+                "Badge Status": badge_status_text,
+                "Action Needed": action_needed,
+                "raw_cum_dose": cum_dose
+            })
+
+    total_workers_count = len(worker_ids)
+
+    # -------------------------------------------------------------------------
+    # SECTION 1: INDUSTRIAL SUMMARY KPI CARDS
+    # -------------------------------------------------------------------------
+    kpi_c1, kpi_c2, kpi_c3, kpi_c4, kpi_c5 = st.columns(5)
+    with kpi_c1:
+        st.metric(
+            label="👥 Total Workers",
+            value=total_workers_count,
+            help="Total registered workforce tracked in safety database"
+        )
+    with kpi_c2:
+        st.metric(
+            label="🟢 Safe Personnel",
+            value=safe_count,
+            help="Workers within permissible 8-hr TWA limit (< 10.0 ppm*hr) with active badges"
+        )
+    with kpi_c3:
+        st.metric(
+            label="🟡 Warning Status",
+            value=warning_count,
+            help="Workers in caution tier (10 - 50 ppm*hr) or badge expiring in <= 7 days"
+        )
+    with kpi_c4:
+        st.metric(
+            label="🔴 Critical Alert",
+            value=critical_count,
+            help="Workers exceeding safe threshold (≥ 50.0 ppm*hr) or holding expired badges"
+        )
+    with kpi_c5:
+        st.metric(
+            label="⏳ Badges Near Expiry",
+            value=near_expiry_count,
+            help="Dosimeter badges expired or expiring within 7 days"
+        )
+
+    st.divider()
+
+    # -------------------------------------------------------------------------
+    # SECTION 2: WORKERS REQUIRING ATTENTION
+    # -------------------------------------------------------------------------
+    st.markdown("<h3 style='color: #F8FAFC;'>🚨 Workers Requiring Attention</h3>", unsafe_allow_html=True)
+    st.caption("Proactive supervisory action list prioritized by cumulative exposure severity and badge expiry condition.")
+
+    if worker_attention_list:
+        # Sort by Priority rank ascending (Critical first), then by cumulative dose descending
+        worker_attention_list.sort(key=lambda x: (x["Priority"], -x["raw_cum_dose"]))
+        df_attention = pd.DataFrame(worker_attention_list)
+        attention_cols = ["Worker ID", "Name", "Work Zone", "Cumulative Dose", "Risk Status", "Badge Status", "Action Needed"]
+        st.dataframe(df_attention[attention_cols], use_container_width=True, hide_index=True)
+    else:
+        st.markdown(
+            f"""
+            <div style="background-color: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between;">
+                <span style="color: #34D399; font-weight: 700; font-size: 1rem;">✅ All Monitored Personnel in Safe Clearance</span>
+                <span style="color: #A7F3D0; font-size: 0.85rem;">All {total_workers_count} registered workers are operating below PEL exposure limits with active badges.</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.divider()
+
+    # -------------------------------------------------------------------------
+    # SECTION 3: BADGE EXPIRY ALERTS
+    # -------------------------------------------------------------------------
+    st.markdown("<h3 style='color: #F8FAFC;'>🛡️ Dosimeter Badge Expiry Alerts</h3>", unsafe_allow_html=True)
+
+    if expiry_alerts_list:
+        for alert in expiry_alerts_list:
+            if alert["severity"] == "EXPIRED":
+                st.markdown(
+                    f"""
+                    <div style="background-color: #7F1D1D; border-left: 4px solid #EF4444; padding: 0.85rem 1.2rem; border-radius: 0.5rem; margin-bottom: 0.6rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong style="color: #FEE2E2; font-size: 0.95rem;">❌ BADGE EXPIRED: {alert['badge_id']}</strong>
+                            <span style="background-color: rgba(239, 68, 68, 0.3); color: #FCA5A5; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                EXPIRED {abs(alert['days_left'])} DAYS AGO ({alert['expiry_date']})
+                            </span>
+                        </div>
+                        <div style="font-size: 0.82rem; color: #FECACA; margin-top: 0.35rem;">
+                            Assigned to: <b>{alert['name']}</b> (<code>{alert['worker_id']}</code>) &nbsp;|&nbsp; 
+                            Dept: {alert['dept']} &nbsp;|&nbsp; Zone: {alert['zone']}<br>
+                            <b>Action:</b> Dosimeter shelf-life exceeded. Confiscate badge and issue new calibrated strip immediately on the Workers page.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f"""
+                    <div style="background-color: #78350F; border-left: 4px solid #F59E0B; padding: 0.85rem 1.2rem; border-radius: 0.5rem; margin-bottom: 0.6rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong style="color: #FEF3C7; font-size: 0.95rem;">⏳ BADGE EXPIRING SOON: {alert['badge_id']}</strong>
+                            <span style="background-color: rgba(245, 158, 11, 0.3); color: #FDE68A; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                {alert['days_left']} DAYS REMAINING ({alert['expiry_date']})
+                            </span>
+                        </div>
+                        <div style="font-size: 0.82rem; color: #FDE68A; margin-top: 0.35rem;">
+                            Assigned to: <b>{alert['name']}</b> (<code>{alert['worker_id']}</code>) &nbsp;|&nbsp; 
+                            Dept: {alert['dept']} &nbsp;|&nbsp; Zone: {alert['zone']}<br>
+                            <b>Action:</b> Schedule replacement before {alert['expiry_date']} to prevent shift disruption.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+    else:
+        st.markdown(
+            """
+            <div style="background-color: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; border-radius: 0.5rem; padding: 0.85rem 1rem; margin-bottom: 1rem;">
+                <span style="color: #34D399; font-weight: 600; font-size: 0.9rem;">✅ All registered dosimeter badges are within valid operating date ranges.</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.divider()
+
+    # -------------------------------------------------------------------------
+    # SECTION 4: EXPOSURE ANALYTICS & TIMELINE CHARTS
+    # -------------------------------------------------------------------------
+    st.markdown("<h3 style='color: #F8FAFC;'>📈 Exposure Trends & Worker Comparisons</h3>", unsafe_allow_html=True)
 
     if df_readings.empty:
-        st.info(
-            "ℹ️ No database records found. Scan sensor strips on the 'Scan Strip'"
-            " page to populate the dashboard."
-        )
+        st.info("ℹ️ No scan readings logged yet. Scan sensor strips to generate exposure charts.")
     else:
-        # Dynamic Worker Selection Dropdown
         unique_workers = sorted(df_readings["worker_id"].unique().tolist())
         view_options = ["All Workers"] + unique_workers
-        selected_view = st.selectbox("🔍 Filter View", options=view_options)
+        selected_view = st.selectbox("🔍 Filter View by Worker", options=view_options)
 
-        # -------------------------------------------------------------------------
-        # RISK ALERT BANNERS (Cumulative Exposure Limits)
-        # -------------------------------------------------------------------------
+        # Risk Alerts (Cumulative Thresholds)
         if selected_view == "All Workers":
             workers_exceeded = []
             workers_warning = []
@@ -1384,61 +1619,58 @@ elif page == "Dashboard":
 
             for wid, cum_dose in workers_exceeded:
                 st.error(
-                    f"🚨 **UNSAFE EXPOSURE ALERT:** Worker ID **{wid}** has"
-                    f" exceeded safe cumulative H₂S exposure ({cum_dose:.2f}"
-                    " ppm*hr / threshold:"
-                    f" {UNSAFE_CUMULATIVE_THRESHOLD:.1f} ppm*hr) — recommend"
-                    " immediate medical review!"
+                    f"🚨 **UNSAFE EXPOSURE ALERT:** Worker ID **{wid}** has exceeded safe cumulative H₂S exposure "
+                    f"({cum_dose:.2f} ppm*hr / threshold: {UNSAFE_CUMULATIVE_THRESHOLD:.1f} ppm*hr) — immediate medical review required!"
                 )
 
             for wid, cum_dose in workers_warning:
                 st.warning(
-                    f"⚡ **EXPOSURE WARNING:** Worker ID **{wid}** is"
-                    f" approaching safe cumulative limits ({cum_dose:.2f}"
-                    f" ppm*hr / {int((cum_dose/UNSAFE_CUMULATIVE_THRESHOLD)*100)}%"
-                    " of threshold)."
+                    f"⚡ **EXPOSURE WARNING:** Worker ID **{wid}** is approaching safe cumulative limits "
+                    f"({cum_dose:.2f} ppm*hr / {int((cum_dose/UNSAFE_CUMULATIVE_THRESHOLD)*100)}% of threshold)."
                 )
         else:
             cum_dose = database.get_cumulative_dose(selected_view)
             if cum_dose >= UNSAFE_CUMULATIVE_THRESHOLD:
                 st.error(
-                    f"🚨 **UNSAFE EXPOSURE ALERT:** Worker ID **{selected_view}**"
-                    f" has exceeded safe cumulative H₂S exposure ({cum_dose:.2f}"
-                    " ppm*hr) — recommend immediate medical review!"
+                    f"🚨 **UNSAFE EXPOSURE ALERT:** Worker ID **{selected_view}** has exceeded safe cumulative H₂S exposure "
+                    f"({cum_dose:.2f} ppm*hr) — immediate medical review required!"
                 )
             elif cum_dose >= (UNSAFE_CUMULATIVE_THRESHOLD * 0.70):
                 st.warning(
-                    f"⚡ **EXPOSURE WARNING:** Worker ID **{selected_view}** is"
-                    f" approaching safe cumulative limits ({cum_dose:.2f}"
-                    " ppm*hr)."
+                    f"⚡ **EXPOSURE WARNING:** Worker ID **{selected_view}** is approaching safe cumulative limits "
+                    f"({cum_dose:.2f} ppm*hr)."
                 )
 
-        st.divider()
-
-        # -------------------------------------------------------------------------
-        # CUMULATIVE DOSE CHARTS
-        # -------------------------------------------------------------------------
-        if selected_view == "All Workers":
-            st.subheader("📊 Cumulative Dose per Worker (ppm * hr)")
+        # Visual Analytics Charts
+        chart_c1, chart_c2 = st.columns(2)
+        with chart_c1:
+            st.subheader("📊 Cumulative Dose per Worker (ppm*hr)")
             worker_totals = df_readings.groupby("worker_id")["dose"].sum()
             st.bar_chart(worker_totals)
-        else:
-            st.subheader(
-                f"📈 Cumulative Exposure Dose Timeline — Worker ID: {selected_view}"
-            )
-            df_worker = database.get_readings_for_worker(selected_view)
-            df_worker["timestamp_dt"] = pd.to_datetime(df_worker["timestamp"])
-            df_worker = df_worker.sort_values("timestamp_dt")
-            df_worker["cumulative_dose"] = df_worker["dose"].cumsum()
-            st.line_chart(df_worker.set_index("timestamp_dt")["cumulative_dose"])
 
-        st.divider()
+        with chart_c2:
+            st.subheader(f"📈 Exposure Timeline ({selected_view})")
+            if selected_view == "All Workers":
+                df_timeline = df_readings.copy()
+            else:
+                df_timeline = database.get_readings_for_worker(selected_view)
+            
+            if not df_timeline.empty:
+                df_timeline["timestamp_dt"] = pd.to_datetime(df_timeline["timestamp"])
+                df_timeline = df_timeline.sort_values("timestamp_dt")
+                df_timeline["cumulative_dose"] = df_timeline["dose"].cumsum()
+                st.line_chart(df_timeline.set_index("timestamp_dt")["cumulative_dose"])
+            else:
+                st.caption("No timeline readings available for selected view.")
 
-        # -------------------------------------------------------------------------
-        # READINGS TABLE & CSV EXPORT
-        # -------------------------------------------------------------------------
-        st.subheader("📋 Logged Dosimeter Readings")
+    st.divider()
 
+    # -------------------------------------------------------------------------
+    # SECTION 5: LOGGED READINGS TABLE & CSV EXPORT
+    # -------------------------------------------------------------------------
+    st.markdown("<h3 style='color: #F8FAFC;'>📋 Logged Dosimeter Readings & Environmental Data</h3>", unsafe_allow_html=True)
+
+    if not df_readings.empty:
         if selected_view == "All Workers":
             df_display = df_readings.copy()
         else:
@@ -1448,7 +1680,6 @@ elif page == "Dashboard":
             lambda x: "❌ EXPIRED" if x == 1 else "✅ Valid"
         )
 
-        # Format environmental & intensity columns
         if "temperature" not in df_display.columns:
             df_display["temperature"] = 25.0
         if "humidity" not in df_display.columns:
@@ -1493,9 +1724,7 @@ elif page == "Dashboard":
         st.dataframe(df_table, use_container_width=True, hide_index=True)
 
         col_export, col_reset = st.columns([2, 2], gap="large")
-
         with col_export:
-            # Export Button (Download readings as CSV)
             csv_data = df_table.to_csv(index=False)
             st.download_button(
                 label="📥 Download readings as CSV",
