@@ -23,6 +23,8 @@ importlib.reload(database)
 import dose_model
 import expiry_checker
 import generate_test_images
+import qr_manager
+importlib.reload(qr_manager)
 import strip_reader
 import train_all_models
 
@@ -243,66 +245,168 @@ elif page == "Scan Strip":
     with col1:
         st.subheader("Step 1: Worker Identification")
         
-        # Query registered workers from SQLite database
-        df_registered_workers = database.get_all_workers()
+        id_method = st.radio(
+            "Worker Identification Method",
+            ["📷 Scan / Upload QR Badge (Automated)", "📋 Manual Directory Selection (Fallback)"],
+            horizontal=True
+        )
 
-        if not df_registered_workers.empty:
-            worker_options = [
-                f"{row['worker_id']} — {row['name']} ({row['department']} | {row['work_zone']})"
-                for _, row in df_registered_workers.iterrows()
-            ]
-            selected_worker_str = st.selectbox(
-                "Select Registered Worker*",
-                options=worker_options,
-                help="Select worker by ID, Name, Department, or Work Zone"
+        worker_id_clean = ""
+        is_worker_id_valid = False
+
+        if id_method == "📷 Scan / Upload QR Badge (Automated)":
+            qr_source_type = st.radio(
+                "QR Code Input Source",
+                ["Upload QR Badge Image", "Live Camera QR Scan", "Quick Test with Sample Badge QR"],
+                horizontal=True
             )
-            worker_id_clean = selected_worker_str.split(" — ")[0].strip()
-            is_worker_id_valid = True
 
-            # Display rich worker profile metadata card
-            worker_info = database.get_worker_by_id(worker_id_clean)
-            if worker_info:
-                # Check badge expiry status
-                try:
-                    exp_date = datetime.strptime(worker_info["badge_expiry_date"], "%Y-%m-%d").date()
-                    is_badge_date_expired = exp_date < date.today()
-                    days_left = (exp_date - date.today()).days
-                except Exception:
-                    is_badge_date_expired = False
-                    days_left = 999
+            qr_bytes_input = None
 
-                status_badge_color = "#10B981" if (worker_info["status"] == "Active" and not is_badge_date_expired) else "#EF4444"
-                status_label = worker_info["status"]
-                if is_badge_date_expired:
-                    status_label = "Badge Expired"
-
-                st.markdown(
-                    f"""
-                    <div style="background-color: #1E293B; border-left: 4px solid {status_badge_color}; padding: 0.85rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <strong style="color: #F8FAFC; font-size: 0.95rem;">👤 {worker_info['name']} ({worker_info['worker_id']})</strong>
-                            <span style="background-color: {'rgba(16, 185, 129, 0.2)' if not is_badge_date_expired and worker_info['status'] == 'Active' else 'rgba(239, 68, 68, 0.2)'}; color: {status_badge_color}; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
-                                {status_label.upper()}
-                            </span>
-                        </div>
-                        <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 0.4rem; line-height: 1.4;">
-                            🏭 <b>Dept:</b> {worker_info['department']} &nbsp;|&nbsp; 📍 <b>Zone:</b> {worker_info['work_zone']}<br>
-                            ⏰ <b>Shift:</b> {worker_info['shift']}<br>
-                            🏷️ <b>Badge ID:</b> <code style="color: #F97316;">{worker_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b>Expiry:</b> {worker_info['badge_expiry_date']}
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
+            if qr_source_type == "Upload QR Badge Image":
+                uploaded_qr_file = st.file_uploader(
+                    "Upload Worker Dosimeter Badge QR",
+                    type=["png", "jpg", "jpeg"],
+                    key="qr_badge_file_uploader"
                 )
+                if uploaded_qr_file is not None:
+                    qr_bytes_input = uploaded_qr_file.getvalue()
 
-                if is_badge_date_expired:
-                    st.warning(f"⚠️ Dosimeter Badge `{worker_info['badge_id']}` expired on {worker_info['badge_expiry_date']}. Immediate replacement recommended.")
-                elif days_left <= 7:
-                    st.caption(f"⏳ Badge `{worker_info['badge_id']}` expires soon ({days_left} days remaining).")
-        else:
-            st.warning("⚠️ No registered workers found in database. Please register workers on the **Workers** page.")
-            worker_id_clean = ""
-            is_worker_id_valid = False
+            elif qr_source_type == "Live Camera QR Scan":
+                cam_qr_file = st.camera_input(
+                    "Photograph Worker Dosimeter Badge QR Code",
+                    key="qr_badge_cam_input"
+                )
+                if cam_qr_file is not None:
+                    qr_bytes_input = cam_qr_file.getvalue()
+
+            else:  # Quick Test with Sample Badge QR
+                df_workers_avail = database.get_all_workers()
+                if not df_workers_avail.empty:
+                    sample_qr_opts = [
+                        f"{r['worker_id']} — {r['name']} (Badge: {r['badge_id']})"
+                        for _, r in df_workers_avail.iterrows()
+                    ]
+                    selected_sample_worker = st.selectbox("Select Worker Badge to Test:", sample_qr_opts)
+                    sel_wid = selected_sample_worker.split(" — ")[0].strip()
+                    sample_w_profile = database.get_worker_by_id(sel_wid)
+                    if sample_w_profile:
+                        qr_bytes_input = qr_manager.generate_badge_qr_png(
+                            sample_w_profile["worker_id"],
+                            sample_w_profile["badge_id"]
+                        )
+                        st.image(qr_bytes_input, caption=f"Simulated QR for {sample_w_profile['name']}", width=160)
+                else:
+                    st.warning("No workers in database to generate test badge.")
+
+            if qr_bytes_input is not None:
+                decoded_wid, decoded_bid, raw_payload = qr_manager.decode_qr_from_image_bytes(qr_bytes_input)
+
+                if not decoded_wid and not decoded_bid:
+                    st.error(
+                        "❌ **QR Detection Failed:** Could not detect or decode a valid QR code in the provided image. "
+                        "Please ensure the badge QR is clear, well-lit, and in focus."
+                    )
+                else:
+                    val_result = qr_manager.validate_badge_profile(decoded_wid, decoded_bid)
+
+                    if val_result["valid"]:
+                        w_info = val_result["worker"]
+                        worker_id_clean = w_info["worker_id"]
+                        is_worker_id_valid = True
+
+                        st.success(f"✅ **QR Badge Verified:** `{w_info['badge_id']}` linked to **{w_info['name']}** ({w_info['worker_id']})")
+
+                        # Rich Verified Profile Badge Card
+                        st.markdown(
+                            f"""
+                            <div style="background-color: #1E293B; border-left: 4px solid #10B981; padding: 0.85rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <strong style="color: #F8FAFC; font-size: 0.95rem;">👤 {w_info['name']} ({w_info['worker_id']})</strong>
+                                    <span style="background-color: rgba(16, 185, 129, 0.2); color: #10B981; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                        QR VERIFIED • ACTIVE
+                                    </span>
+                                </div>
+                                <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 0.4rem; line-height: 1.4;">
+                                    🏭 <b>Dept:</b> {w_info['department']} &nbsp;|&nbsp; 📍 <b>Zone:</b> {w_info['work_zone']}<br>
+                                    ⏰ <b>Shift:</b> {w_info['shift']}<br>
+                                    🏷️ <b>Badge ID:</b> <code style="color: #F97316;">{w_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b>Expiry:</b> {w_info['badge_expiry_date']}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.error(f"🚨 **Safety & Badge Verification Alert:** {val_result['message']}")
+                        if val_result.get("worker"):
+                            w_err = val_result["worker"]
+                            st.warning(
+                                f"Worker Found: **{w_err['name']}** ({w_err['worker_id']}) | "
+                                f"Status: `{w_err['status']}` | Badge Expiry: `{w_err['badge_expiry_date']}`"
+                            )
+            else:
+                st.info("📷 Please upload, capture, or select a Worker QR Badge above to identify the worker.")
+
+        else:  # Manual Directory Selection (Fallback)
+            df_registered_workers = database.get_all_workers()
+
+            if not df_registered_workers.empty:
+                worker_options = [
+                    f"{row['worker_id']} — {row['name']} ({row['department']} | {row['work_zone']})"
+                    for _, row in df_registered_workers.iterrows()
+                ]
+                selected_worker_str = st.selectbox(
+                    "Select Registered Worker*",
+                    options=worker_options,
+                    help="Select worker by ID, Name, Department, or Work Zone"
+                )
+                worker_id_clean = selected_worker_str.split(" — ")[0].strip()
+                is_worker_id_valid = True
+
+                # Display rich worker profile metadata card
+                worker_info = database.get_worker_by_id(worker_id_clean)
+                if worker_info:
+                    # Check badge expiry status
+                    try:
+                        exp_date = datetime.strptime(worker_info["badge_expiry_date"], "%Y-%m-%d").date()
+                        is_badge_date_expired = exp_date < date.today()
+                        days_left = (exp_date - date.today()).days
+                    except Exception:
+                        is_badge_date_expired = False
+                        days_left = 999
+
+                    status_badge_color = "#10B981" if (worker_info["status"] == "Active" and not is_badge_date_expired) else "#EF4444"
+                    status_label = worker_info["status"]
+                    if is_badge_date_expired:
+                        status_label = "Badge Expired"
+
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #1E293B; border-left: 4px solid {status_badge_color}; padding: 0.85rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <strong style="color: #F8FAFC; font-size: 0.95rem;">👤 {worker_info['name']} ({worker_info['worker_id']})</strong>
+                                <span style="background-color: {'rgba(16, 185, 129, 0.2)' if not is_badge_date_expired and worker_info['status'] == 'Active' else 'rgba(239, 68, 68, 0.2)'}; color: {status_badge_color}; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                    {status_label.upper()}
+                                </span>
+                            </div>
+                            <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 0.4rem; line-height: 1.4;">
+                                🏭 <b>Dept:</b> {worker_info['department']} &nbsp;|&nbsp; 📍 <b>Zone:</b> {worker_info['work_zone']}<br>
+                                ⏰ <b>Shift:</b> {worker_info['shift']}<br>
+                                🏷️ <b>Badge ID:</b> <code style="color: #F97316;">{worker_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b>Expiry:</b> {worker_info['badge_expiry_date']}
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                    if is_badge_date_expired:
+                        st.warning(f"⚠️ Dosimeter Badge `{worker_info['badge_id']}` expired on {worker_info['badge_expiry_date']}. Immediate replacement recommended.")
+                    elif days_left <= 7:
+                        st.caption(f"⏳ Badge `{worker_info['badge_id']}` expires soon ({days_left} days remaining).")
+            else:
+                st.warning("⚠️ No registered workers found in database. Please register workers on the **Workers** page.")
+                worker_id_clean = ""
+                is_worker_id_valid = False
 
         st.subheader("Step 2: Provide Image")
 
@@ -681,28 +785,28 @@ elif page == "Workers":
                 w_cum_dose = database.get_cumulative_dose(sel_inspect_id)
                 w_readings = database.get_readings_for_worker(sel_inspect_id)
 
-                dossier_c1, dossier_c2 = st.columns([1, 1], gap="large")
+                dossier_c1, dossier_c2, dossier_c3 = st.columns([1.1, 0.9, 1.0], gap="medium")
                 with dossier_c1:
                     st.markdown(
                         f"""
-                        <div style="background-color: #1E293B; border-radius: 0.75rem; padding: 1.25rem; border: 1px solid #334155;">
+                        <div style="background-color: #1E293B; border-radius: 0.75rem; padding: 1.15rem; border: 1px solid #334155; height: 100%;">
                             <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem;">
-                                <div style="background: #0F172A; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; border: 2px solid #F97316;">
+                                <div style="background: #0F172A; border-radius: 50%; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; border: 2px solid #F97316;">
                                     👷
                                 </div>
                                 <div>
-                                    <h3 style="margin: 0; color: #F8FAFC; font-size: 1.25rem;">{w_profile['name']}</h3>
+                                    <h3 style="margin: 0; color: #F8FAFC; font-size: 1.15rem;">{w_profile['name']}</h3>
                                     <span style="color: #F97316; font-weight: 700; font-size: 0.85rem;">{w_profile['worker_id']}</span> &nbsp;|&nbsp; 
                                     <span style="color: #94A3B8; font-size: 0.85rem;">{w_profile['status']}</span>
                                 </div>
                             </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.85rem; color: #CBD5E1; margin-top: 1rem;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; font-size: 0.82rem; color: #CBD5E1; margin-top: 0.75rem;">
                                 <div><b>Department:</b><br><span style="color: #F8FAFC;">{w_profile['department']}</span></div>
                                 <div><b>Work Zone:</b><br><span style="color: #F8FAFC;">{w_profile['work_zone']}</span></div>
-                                <div><b>Assigned Shift:</b><br><span style="color: #F8FAFC;">{w_profile['shift']}</span></div>
-                                <div><b>Dosimeter Badge ID:</b><br><code style="color: #F97316;">{w_profile['badge_id']}</code></div>
-                                <div><b>Badge Issue Date:</b><br><span style="color: #F8FAFC;">{w_profile['badge_issue_date']}</span></div>
-                                <div><b>Badge Expiry Date:</b><br><span style="color: #F8FAFC;">{w_profile['badge_expiry_date']}</span></div>
+                                <div><b>Shift:</b><br><span style="color: #F8FAFC;">{w_profile['shift']}</span></div>
+                                <div><b>Badge ID:</b><br><code style="color: #F97316;">{w_profile['badge_id']}</code></div>
+                                <div><b>Issue Date:</b><br><span style="color: #F8FAFC;">{w_profile['badge_issue_date']}</span></div>
+                                <div><b>Expiry Date:</b><br><span style="color: #F8FAFC;">{w_profile['badge_expiry_date']}</span></div>
                             </div>
                         </div>
                         """,
@@ -710,9 +814,9 @@ elif page == "Workers":
                     )
 
                 with dossier_c2:
-                    st.markdown("##### ⚡ Exposure & Dosimeter Health")
+                    st.markdown("##### ⚡ Exposure & Health")
                     st.metric(
-                        "Total Cumulative H₂S Dose",
+                        "Cumulative H₂S Dose",
                         f"{w_cum_dose:.2f} ppm*hr",
                         delta=f"{UNSAFE_CUMULATIVE_THRESHOLD - w_cum_dose:.2f} ppm*hr remaining" if w_cum_dose < UNSAFE_CUMULATIVE_THRESHOLD else "EXCEEDED LIMIT",
                         delta_color="normal" if w_cum_dose < UNSAFE_CUMULATIVE_THRESHOLD else "inverse"
@@ -720,9 +824,33 @@ elif page == "Workers":
                     
                     # Exposure threshold progress bar
                     progress_val = min(1.0, max(0.0, w_cum_dose / UNSAFE_CUMULATIVE_THRESHOLD))
-                    st.progress(progress_val, text=f"OSHA/DGMS Cumulative Limit ({w_cum_dose:.1f} / {UNSAFE_CUMULATIVE_THRESHOLD:.1f} ppm*hr)")
+                    st.progress(progress_val, text=f"Limit ({w_cum_dose:.1f} / {UNSAFE_CUMULATIVE_THRESHOLD:.1f} ppm*hr)")
+                    st.caption(f"Total Scans Logged: **{len(w_readings)}** records.")
 
-                    st.caption(f"Total Dosimeter Scans Logged: **{len(w_readings)}** records.")
+                with dossier_c3:
+                    st.markdown("##### 📱 Smart QR Badge")
+                    badge_card_png = qr_manager.generate_styled_badge_card(w_profile)
+                    raw_qr_png = qr_manager.generate_badge_qr_png(w_profile["worker_id"], w_profile["badge_id"])
+                    
+                    st.image(badge_card_png, caption="Printable Safety Badge Card", use_container_width=True)
+                    
+                    btn_c1, btn_c2 = st.columns(2)
+                    with btn_c1:
+                        st.download_button(
+                            label="🖨️ Badge Card",
+                            data=badge_card_png,
+                            file_name=f"doseband_badge_{w_profile['badge_id']}.png",
+                            mime="image/png",
+                            use_container_width=True
+                        )
+                    with btn_c2:
+                        st.download_button(
+                            label="📱 Raw QR",
+                            data=raw_qr_png,
+                            file_name=f"doseband_qr_{w_profile['badge_id']}.png",
+                            mime="image/png",
+                            use_container_width=True
+                        )
 
             # CSV Download
             csv_workers = df_filtered.to_csv(index=False)
