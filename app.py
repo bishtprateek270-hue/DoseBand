@@ -684,6 +684,30 @@ elif page == "Scan Strip":
                     """
                 st.markdown(strip_badge_html, unsafe_allow_html=True)
 
+                # Validation Score Criteria Breakdown for Diagnostics
+                with st.expander("🔬 Validation Score Breakdown (6-Criteria Analysis)", expanded=False):
+                    bd = strip_val_res.get("breakdown", {})
+                    bd_c1, bd_c2, bd_c3 = st.columns(3)
+                    check_keys = list(bd.keys())
+                    for i, k in enumerate(check_keys):
+                        item = bd[k]
+                        target_col = bd_c1 if i % 3 == 0 else (bd_c2 if i % 3 == 1 else bd_c3)
+                        item_score = item['score_pct']
+                        score_color = "#34D399" if item_score >= 75 else ("#FBBF24" if item_score >= 50 else "#F87171")
+                        with target_col:
+                            st.markdown(
+                                f"""
+                                <div style="background-color: #0F172A; border: 1px solid #334155; padding: 0.5rem 0.75rem; border-radius: 0.35rem; margin-bottom: 0.4rem;">
+                                    <div style="font-size: 0.76rem; color: #CBD5E1; font-weight: 600;">{item['name']} ({item['weight_pct']}%)</div>
+                                    <strong style="color: {score_color}; font-size: 0.95rem;">
+                                        {item_score:.1f}%
+                                    </strong>
+                                    <span style="font-size: 0.75rem; color: #94A3B8;"> (+{item['weighted_points']:.1f} pts)</span>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+
                 if not is_strip_valid and strip_val_res["rejection_reasons"]:
                     st.error(
                         "🚨 **Validation Rejection Reasons (Analysis Blocked):**\n" +
