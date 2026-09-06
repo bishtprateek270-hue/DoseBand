@@ -477,7 +477,8 @@ elif page == "Scan Strip":
             )
 
         # Dynamic live preview of prototype compensation factor
-        live_cf = environmental_compensation.calculate_compensation_factor(ambient_temp, ambient_humidity)
+        comp_preview = environmental_compensation.calculate_compensation_factor(ambient_temp, ambient_humidity)
+        live_cf = comp_preview["compensation_factor"]
         cf_pct_diff = (live_cf - 1.0) * 100.0
         cf_color = "#34D399" if abs(cf_pct_diff) < 0.1 else ("#FBBF24" if live_cf > 1.0 else "#60A5FA")
 
