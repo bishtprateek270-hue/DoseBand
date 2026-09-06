@@ -385,12 +385,11 @@ elif page == "Scan Strip":
                     help="Select worker by ID, Name, Department, or Work Zone"
                 )
                 worker_id_clean = selected_worker_str.split(" — ")[0].strip()
-                is_worker_id_valid = True
 
                 # Display rich worker profile metadata card
                 worker_info = database.get_worker_by_id(worker_id_clean)
                 if worker_info:
-                    # Check badge expiry status
+                    # Check badge expiry status and active status
                     try:
                         exp_date = datetime.strptime(worker_info["badge_expiry_date"], "%Y-%m-%d").date()
                         is_badge_date_expired = exp_date < date.today()
@@ -399,7 +398,10 @@ elif page == "Scan Strip":
                         is_badge_date_expired = False
                         days_left = 999
 
-                    status_badge_color = "#10B981" if (worker_info["status"] == "Active" and not is_badge_date_expired) else "#EF4444"
+                    is_worker_active = (worker_info.get("status") == "Active")
+                    is_worker_id_valid = bool(is_worker_active and not is_badge_date_expired)
+
+                    status_badge_color = "#10B981" if (is_worker_active and not is_badge_date_expired) else "#EF4444"
                     status_label = worker_info["status"]
                     if is_badge_date_expired:
                         status_label = "Badge Expired"
@@ -409,7 +411,7 @@ elif page == "Scan Strip":
                         <div style="background-color: #1E293B; border-left: 4px solid {status_badge_color}; padding: 0.85rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <strong style="color: #F8FAFC; font-size: 0.95rem;">👤 {worker_info['name']} ({worker_info['worker_id']})</strong>
-                                <span style="background-color: {'rgba(16, 185, 129, 0.2)' if not is_badge_date_expired and worker_info['status'] == 'Active' else 'rgba(239, 68, 68, 0.2)'}; color: {status_badge_color}; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                <span style="background-color: {'rgba(16, 185, 129, 0.2)' if not is_badge_date_expired and is_worker_active else 'rgba(239, 68, 68, 0.2)'}; color: {status_badge_color}; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
                                     {status_label.upper()}
                                 </span>
                             </div>
@@ -424,9 +426,13 @@ elif page == "Scan Strip":
                     )
 
                     if is_badge_date_expired:
-                        st.warning(f"⚠️ Dosimeter Badge `{worker_info['badge_id']}` expired on {worker_info['badge_expiry_date']}. Immediate replacement recommended.")
+                        st.error(f"🚨 **Badge Expired:** Dosimeter Badge `{worker_info['badge_id']}` expired on {worker_info['badge_expiry_date']}. Analysis and exposure recording are strictly blocked.")
+                    elif not is_worker_active:
+                        st.error(f"🚨 **Worker Inactive:** Worker status is '{worker_info['status']}'. Analysis and exposure recording are strictly blocked.")
                     elif days_left <= 7:
                         st.caption(f"⏳ Badge `{worker_info['badge_id']}` expires soon ({days_left} days remaining).")
+                else:
+                    is_worker_id_valid = False
             else:
                 st.warning("⚠️ No registered workers found in database. Please register workers on the **Workers** page.")
                 worker_id_clean = ""
@@ -477,13 +483,13 @@ elif page == "Scan Strip":
         env_c1, env_c2 = st.columns(2)
         with env_c1:
             ambient_temp = st.number_input(
-                "🌡️ Ambient Temp (°C)",
+                "🌡️ Ambient Temp (°C) [Manual / Demo]",
                 min_value=-10.0,
                 max_value=60.0,
                 value=25.0,
                 step=0.5,
                 format="%.1f",
-                help="Reference baseline is 25.0°C. Temperature affects lead acetate chemical reaction kinetics."
+                help="Manual / Demo Ambient Input. Reference baseline is 25.0°C. Temperature affects lead acetate chemical reaction kinetics."
             )
             exposure_time = st.number_input(
                 "⏱️ Shift Exposure Duration (hours)",
@@ -542,6 +548,7 @@ elif page == "Scan Strip":
     with col2:
         is_quality_valid = False
         is_strip_valid = False
+        rois_detected = False
         quality_diag = None
         strip_val_res = None
         roi_detections = None
@@ -565,6 +572,16 @@ elif page == "Scan Strip":
                 strip_val_status = strip_val_res["status"]
 
                 roi_detections = roi_detector.detect_all_rois(preview_bgr)
+
+                # Check required ROIs
+                ref_ok = quality_diag["ref_scale_detected"] and (strip_val_res["checks"]["reference_scale"]["score"] >= 0.40)
+                strip_ok = quality_diag["sensor_strip_detected"] and is_strip_valid
+                if humidity_input_mode == "🤖 Optical Humidity Card (KNN)":
+                    hum_ok = (roi_detections["humidity_indicator"]["confidence"] >= 0.50)
+                else:
+                    hum_ok = (manual_humidity is not None)
+                calib_ok = quality_diag["calibration_successful"] and is_strip_valid
+                rois_detected = bool(ref_ok and strip_ok and hum_ok)
 
                 # Show preview tabs: Annotated Multi-ROI Visual Overlay vs Raw Image
                 tab_preview_roi, tab_preview_raw = st.tabs(["🎯 Detected ROIs Overlay", "📷 Original Photo"])
@@ -635,7 +652,6 @@ elif page == "Scan Strip":
                 ind_col1, ind_col2, ind_col3, ind_col4 = st.columns(4)
 
                 with ind_col1:
-                    ref_ok = quality_diag["ref_scale_detected"] and (strip_val_res["checks"]["reference_scale"]["score"] >= 0.40)
                     st.markdown(
                         f"""
                         <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if ref_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
@@ -649,7 +665,6 @@ elif page == "Scan Strip":
                     )
 
                 with ind_col2:
-                    strip_ok = quality_diag["sensor_strip_detected"] and is_strip_valid
                     st.markdown(
                         f"""
                         <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if strip_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
@@ -663,13 +678,12 @@ elif page == "Scan Strip":
                     )
 
                 with ind_col3:
-                    hum_ok = roi_detections["humidity_indicator"]["confidence"] >= 0.50
                     st.markdown(
                         f"""
                         <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if hum_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
-                            <div style="font-size: 0.75rem; color: #94A3B8;">💧 Humidity Card</div>
+                            <div style="font-size: 0.75rem; color: #94A3B8;">💧 Humidity Source</div>
                             <strong style="color: {'#34D399' if hum_ok else '#F87171'}; font-size: 0.82rem;">
-                                {'✅ Detected (Circle)' if hum_ok else '❌ Not Detected'}
+                                {'✅ Card Detected' if (humidity_input_mode.startswith('🤖') and hum_ok) else ('✅ Manual Set' if hum_ok else '❌ Not Available')}
                             </strong>
                         </div>
                         """,
@@ -677,7 +691,6 @@ elif page == "Scan Strip":
                     )
 
                 with ind_col4:
-                    calib_ok = quality_diag["calibration_successful"] and is_strip_valid
                     st.markdown(
                         f"""
                         <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if calib_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
@@ -692,19 +705,35 @@ elif page == "Scan Strip":
         else:
             st.info("📷 Image preview will appear here after selecting a sample, uploading a file, or taking a photo.")
 
-        # Button is strictly disabled unless worker_id is valid, image supplied, quality passes, and strip validation is VALID
-        is_disabled = not (is_worker_id_valid and image_bytes_to_process is not None and is_quality_valid and is_strip_valid)
-
-        analyze_clicked = st.button(
-            "🔍 Analyze Dosimeter Badge", disabled=is_disabled, type="primary", use_container_width=True
+        # Unified prerequisite verification gate
+        env_params_valid = bool(ambient_temp is not None and exposure_time is not None and exposure_time > 0)
+        prediction_allowed = bool(
+            is_worker_id_valid and
+            (image_bytes_to_process is not None) and
+            (preview_bgr is not None) and
+            is_strip_valid and
+            is_quality_valid and
+            rois_detected and
+            env_params_valid
         )
 
-        if not is_strip_valid and image_bytes_to_process is not None:
-            st.caption("🔒 *Analysis strictly blocked: Only genuine DoseBand H₂S strips with a verified reference scale can be analyzed.*")
-        elif not is_quality_valid and image_bytes_to_process is not None:
-            st.caption("🔒 *Analysis disabled: Please resolve image blur/lighting quality issues indicated above.*")
+        analyze_clicked = st.button(
+            "🔍 Analyze Dosimeter Badge", disabled=not prediction_allowed, type="primary", use_container_width=True
+        )
 
-        if analyze_clicked and image_bytes_to_process is not None and preview_bgr is not None:
+        if not prediction_allowed and image_bytes_to_process is not None:
+            if not is_worker_id_valid:
+                st.caption("🔒 *Analysis blocked: Worker badge is expired, inactive, or unverified. Please resolve worker credentials above.*")
+            elif not is_strip_valid:
+                st.caption("🔒 *Analysis strictly blocked: Only genuine DoseBand H₂S strips with a verified reference scale can be analyzed.*")
+            elif not is_quality_valid:
+                st.caption("🔒 *Analysis disabled: Please resolve image blur/lighting quality issues indicated above (Retake Required).*")
+            elif not rois_detected:
+                st.caption("🔒 *Analysis disabled: Required sensor regions (H₂S strip, reference scale, or humidity card) could not be detected.*")
+            elif not env_params_valid:
+                st.caption("🔒 *Analysis disabled: Please provide valid shift duration and environmental parameters.*")
+
+        if analyze_clicked and prediction_allowed and image_bytes_to_process is not None and preview_bgr is not None:
             with st.spinner("Executing multi-ROI lighting compensation, Humidity KNN & H2S RandomForest inference..."):
                 try:
                     pipeline = inference_engine.get_inference_pipeline()
@@ -724,25 +753,36 @@ elif page == "Scan Strip":
                     is_expired = expiry_res["is_expired"]
                     expiry_status_msg = expiry_res["status_message"]
 
-                    # Save to database
-                    record_id = database.insert_reading(
-                        worker_id=worker_id_clean,
-                        intensity=inf_res["staining_intensity"],
-                        dose=inf_res["cumulative_dose_ppm_h"],
-                        risk_level=inf_res["risk_level"],
-                        is_expired=is_expired,
-                        expiry_status_message=expiry_status_msg,
-                        temperature=ambient_temp,
-                        humidity=inf_res["predicted_humidity"],
-                        raw_intensity=inf_res["staining_intensity"],
-                        corrected_intensity=inf_res["staining_intensity"],
-                        compensation_factor=1.0,
-                        predicted_humidity=inf_res["predicted_humidity"],
-                        exposure_time=exposure_time,
-                        strip_intensity=inf_res["staining_intensity"],
-                        estimated_h2s_ppm=inf_res["estimated_h2s_ppm"],
-                        data_source="SIMULATED_REFERENCE_IMAGE_MODEL"
-                    )
+                    # Prevent duplicate database saves on Streamlit reruns
+                    import hashlib
+                    raw_img_sha = hashlib.sha256(image_bytes_to_process).hexdigest()
+                    current_scan_hash = hashlib.sha256(
+                        f"{worker_id_clean}_{raw_img_sha}_{ambient_temp:.1f}_{exposure_time:.2f}_{manual_humidity}_{inf_res['estimated_h2s_ppm']:.2f}".encode()
+                    ).hexdigest()
+
+                    if st.session_state.get("last_saved_scan_hash") != current_scan_hash:
+                        record_id = database.insert_reading(
+                            worker_id=worker_id_clean,
+                            intensity=inf_res["staining_intensity"],
+                            dose=inf_res["cumulative_dose_ppm_h"],
+                            risk_level=inf_res["risk_level"],
+                            is_expired=is_expired,
+                            expiry_status_message=expiry_status_msg,
+                            temperature=ambient_temp,
+                            humidity=inf_res["predicted_humidity"],
+                            raw_intensity=inf_res["staining_intensity"],
+                            corrected_intensity=inf_res["staining_intensity"],
+                            compensation_factor=1.0,
+                            predicted_humidity=inf_res["predicted_humidity"],
+                            exposure_time=exposure_time,
+                            strip_intensity=inf_res["staining_intensity"],
+                            estimated_h2s_ppm=inf_res["estimated_h2s_ppm"],
+                            data_source="SIMULATED_REFERENCE_IMAGE_MODEL"
+                        )
+                        st.session_state["last_saved_scan_hash"] = current_scan_hash
+                        st.session_state["last_saved_record_id"] = record_id
+                    else:
+                        record_id = st.session_state.get("last_saved_record_id", "Logged")
 
                     cumulative_dose = database.get_cumulative_dose(worker_id_clean)
 
@@ -789,7 +829,14 @@ elif page == "Scan Strip":
                             help="Normalized surface reflectance darkening score (0.0 to 1.0)"
                         )
 
-                    # Risk Level Banner
+                    # Environmental Context Line
+                    st.caption(
+                        f"🌡️ **Ambient Temperature (Manual / Demo):** `{ambient_temp:.1f} °C` &nbsp;|&nbsp; "
+                        f"⏱️ **Shift Duration:** `{exposure_time:.1f} hrs` &nbsp;|&nbsp; "
+                        f"💧 **Humidity Mode:** `{inf_res['humidity_source']}`"
+                    )
+
+                    # Risk Level Banner (Evaluated only after valid prediction)
                     st.markdown(
                         f"""
                         <div style="background-color: #1E293B; border-left: 4px solid {inf_res['risk_color']}; padding: 0.85rem; border-radius: 0.5rem; margin-top: 0.75rem; margin-bottom: 0.75rem;">

@@ -170,6 +170,20 @@ class DoseBandInferencePipeline:
         roi_detections = detect_all_rois(corrected_bgr)
         annotated_overlay = draw_roi_visual_overlay(corrected_bgr, roi_detections)
 
+        if not roi_detections.get("is_valid", False):
+            return {
+                "is_valid": False,
+                "validation_status": "Invalid",
+                "validation_score": val_res.get("validation_score", 0.0),
+                "confidence_pct": 0,
+                "user_message": "Required DoseBand sensor strip or reference ROIs could not be reliably detected in the image.",
+                "rejection_reasons": ["Required sensor regions (H2S strip or reference scale) missing, occluded, or out of frame."],
+                "roi_detections": roi_detections,
+                "annotated_overlay": annotated_overlay,
+                "data_source": "ROI_DETECTION_FAILED",
+                "disclaimer": PROTOTYPE_DISCLAIMER
+            }
+
         # 3. Feature Extraction from Central ROIs
         h2s_box = roi_detections["h2s_strip"]["box"]
         hum_box = roi_detections["humidity_indicator"]["box"]
@@ -193,7 +207,7 @@ class DoseBandInferencePipeline:
             exposure_time_h=exposure_time_h
         )
 
-        # 6. Cumulative dose and Risk classification
+        # 6. Cumulative dose and Risk classification (runs only on valid prediction)
         cumulative_dose = round(estimated_h2s_ppm * exposure_time_h, 2)
         risk_level, badge_color, action_msg = self.classify_risk(estimated_h2s_ppm, exposure_time_h)
 
@@ -202,7 +216,7 @@ class DoseBandInferencePipeline:
         staining_intensity = round(float(np.clip((240.0 - raw_val) / 190.0, 0.0, 1.0)), 4)
 
         return {
-            "is_valid": roi_detections["is_valid"],
+            "is_valid": True,
             "overall_confidence": roi_detections["overall_confidence"],
             "roi_detections": roi_detections,
             "annotated_overlay": annotated_overlay,
