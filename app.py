@@ -29,6 +29,8 @@ import qr_manager
 importlib.reload(qr_manager)
 import quality_validator
 importlib.reload(quality_validator)
+import safety_report_generator
+importlib.reload(safety_report_generator)
 import strip_reader
 import train_all_models
 
@@ -1672,7 +1674,105 @@ elif page == "Dashboard":
     st.divider()
 
     # -------------------------------------------------------------------------
-    # SECTION 5: LOGGED READINGS TABLE & CSV EXPORT
+    # SECTION 5: SAFETY AUDIT REPORT GENERATOR (DGMS / OISD)
+    # -------------------------------------------------------------------------
+    st.markdown("<h3 class='section-header'>📑 Safety Audit Report Generator</h3>", unsafe_allow_html=True)
+    st.caption("Generate and export formal DGMS / OISD compliant occupational health audit reports in PDF and CSV formats based on live database records.")
+
+    rc_col1, rc_col2, rc_col3 = st.columns([2, 1, 1])
+
+    with rc_col1:
+        rep_worker_options = ["All Workers"] + [
+            f"{w['worker_id']} — {w['name']} ({w['department']})"
+            for _, w in df_workers.iterrows()
+        ] if not df_workers.empty else ["All Workers"]
+        selected_rep_worker = st.selectbox("Select Worker Scope for Report:", rep_worker_options)
+        rep_wid = "All Workers" if selected_rep_worker == "All Workers" else selected_rep_worker.split(" — ")[0].strip()
+
+    with rc_col2:
+        default_start = date.today() - timedelta(days=30)
+        rep_start_date = st.date_input("Report Start Date:", value=default_start)
+
+    with rc_col3:
+        rep_end_date = st.date_input("Report End Date:", value=date.today())
+
+    if rep_start_date > rep_end_date:
+        st.error("⚠️ Start Date cannot be later than End Date.")
+    else:
+        report_data = safety_report_generator.generate_safety_report_data(
+            worker_id_filter=rep_wid,
+            start_date=rep_start_date,
+            end_date=rep_end_date
+        )
+
+        # Executive Report Summary Box
+        st.markdown(
+            f"""
+            <div style="background-color: #1E293B; border-left: 4px solid {report_data['compliance_color']}; padding: 1rem 1.25rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.85rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong style="color: #F8FAFC; font-size: 1rem;">🛡️ {report_data['report_id']}</strong>
+                    <span style="background-color: rgba(255,255,255,0.1); color: {report_data['compliance_color']}; font-weight: 700; font-size: 0.78rem; padding: 3px 10px; border-radius: 4px;">
+                        {report_data['overall_compliance']}
+                    </span>
+                </div>
+                <div style="font-size: 0.84rem; color: #94A3B8; margin-top: 0.4rem; line-height: 1.5;">
+                    📌 <b>Scope:</b> {report_data['worker_filter']} &nbsp;|&nbsp; 
+                    📅 <b>Period:</b> {report_data['start_date']} to {report_data['end_date']} &nbsp;|&nbsp; 
+                    ⏰ <b>Generated:</b> {report_data['generated_at']}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        # Key Report Metrics Row
+        rep_m1, rep_m2, rep_m3, rep_m4, rep_m5 = st.columns(5)
+        with rep_m1:
+            st.metric("Total Scans in Period", report_data["total_scans"])
+        with rep_m2:
+            st.metric("Cumulative Period Dose", f"{report_data['total_dose']:.2f} ppm*hr")
+        with rep_m3:
+            st.metric("Mean Scan Dose", f"{report_data['avg_dose']:.2f} ppm*hr")
+        with rep_m4:
+            st.metric("Peak Single Dose", f"{report_data['max_dose']:.2f} ppm*hr")
+        with rep_m5:
+            st.metric("Ambient Conditions", f"{report_data['avg_temp']:.1f}°C / {report_data['avg_humidity']:.0f}% RH")
+
+        # Prototype Disclaimer
+        st.caption(
+            "⚠️ **Prototype Notice:** Ambient temperature and humidity compensation factors reflect an experimental "
+            "kinetic prototype model. Official regulatory reporting references uncompensated optical calibration."
+        )
+
+        # Download Action Buttons
+        pdf_bytes = safety_report_generator.generate_pdf_report(report_data)
+        csv_report_data = safety_report_generator.generate_csv_report(report_data)
+
+        dl_col1, dl_col2 = st.columns([1, 1], gap="medium")
+        clean_tag = "ALL" if rep_wid == "All Workers" else rep_wid.replace("-", "_")
+        
+        with dl_col1:
+            st.download_button(
+                label="📄 Download Official Safety Report (PDF)",
+                data=pdf_bytes,
+                file_name=f"DoseBand_Safety_Report_{clean_tag}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf",
+                type="primary",
+                use_container_width=True
+            )
+        with dl_col2:
+            st.download_button(
+                label="📊 Download Safety Audit Logs (CSV)",
+                data=csv_report_data,
+                file_name=f"DoseBand_Audit_Data_{clean_tag}_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+    st.divider()
+
+    # -------------------------------------------------------------------------
+    # SECTION 6: LOGGED READINGS TABLE & CSV EXPORT
     # -------------------------------------------------------------------------
     st.markdown("<h3 class='section-header'>📋 Logged Dosimeter Readings & Environmental Data</h3>", unsafe_allow_html=True)
 
