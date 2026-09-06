@@ -70,7 +70,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
         """
     )
 
-    # Auto-migration for existing tables missing new environmental columns
+    # Auto-migration for existing tables missing new columns
     cursor.execute("PRAGMA table_info(readings);")
     existing_cols = {row[1] for row in cursor.fetchall()}
     env_cols = [
@@ -78,7 +78,13 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
         ("humidity", "REAL DEFAULT 50.0"),
         ("raw_intensity", "REAL DEFAULT 0.0"),
         ("corrected_intensity", "REAL DEFAULT 0.0"),
-        ("compensation_factor", "REAL DEFAULT 1.0")
+        ("compensation_factor", "REAL DEFAULT 1.0"),
+        ("badge_id", "TEXT DEFAULT ''"),
+        ("predicted_humidity", "REAL DEFAULT 50.0"),
+        ("exposure_time", "REAL DEFAULT 1.0"),
+        ("strip_intensity", "REAL DEFAULT 0.0"),
+        ("estimated_h2s_ppm", "REAL DEFAULT 0.0"),
+        ("data_source", "TEXT DEFAULT 'SIMULATED_REFERENCE_IMAGE_MODEL'")
     ]
     for col_name, col_type in env_cols:
         if col_name not in existing_cols:
@@ -482,10 +488,17 @@ def insert_reading(
     raw_intensity: Optional[float] = None,
     corrected_intensity: Optional[float] = None,
     compensation_factor: float = 1.0,
+    badge_id: Optional[str] = None,
+    predicted_humidity: Optional[float] = None,
+    exposure_time: float = 1.0,
+    strip_intensity: Optional[float] = None,
+    estimated_h2s_ppm: Optional[float] = None,
+    data_source: str = "SIMULATED_REFERENCE_IMAGE_MODEL",
     db_path: str = DEFAULT_DB_PATH
 ) -> int:
     """
-    Inserts a new sensor reading log record into the database with ISO timestamp and environmental data.
+    Inserts a new sensor reading log record into the database with ISO timestamp, environmental data,
+    and simulated reference ML model estimates.
 
     Args:
         worker_id (str): Unique worker identification code.
@@ -499,6 +512,12 @@ def insert_reading(
         raw_intensity (Optional[float]): Raw optical staining intensity.
         corrected_intensity (Optional[float]): Temperature/humidity-compensated intensity.
         compensation_factor (float): Environmental compensation multiplier.
+        badge_id (Optional[str]): Linked badge identifier.
+        predicted_humidity (Optional[float]): Humidity predicted via KNN indicator model.
+        exposure_time (float): Exposure duration in hours (default: 1.0).
+        strip_intensity (Optional[float]): Normalized chemical staining intensity.
+        estimated_h2s_ppm (Optional[float]): H2S concentration predicted via RandomForest model.
+        data_source (str): Calibration source flag ('SIMULATED_REFERENCE_IMAGE_MODEL').
         db_path (str): Database file path.
 
     Returns:
@@ -514,13 +533,28 @@ def insert_reading(
 
     r_int = float(intensity) if raw_intensity is None else float(raw_intensity)
     c_int = float(intensity) if corrected_intensity is None else float(corrected_intensity)
+    s_int = float(intensity) if strip_intensity is None else float(strip_intensity)
+    
+    # Auto-lookup badge_id if not explicitly provided
+    resolved_badge_id = ""
+    if badge_id:
+        resolved_badge_id = str(badge_id).strip()
+    else:
+        cursor.execute("SELECT badge_id FROM workers WHERE worker_id = ?;", (str(worker_id).strip(),))
+        row = cursor.fetchone()
+        if row and row[0]:
+            resolved_badge_id = str(row[0])
+
+    p_hum = float(humidity) if predicted_humidity is None else float(predicted_humidity)
+    e_ppm = float(dose) if estimated_h2s_ppm is None else float(estimated_h2s_ppm)
 
     cursor.execute(
         """
         INSERT INTO readings (
             worker_id, timestamp, intensity, dose, risk_level, is_expired, expiry_status_message,
-            temperature, humidity, raw_intensity, corrected_intensity, compensation_factor
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            temperature, humidity, raw_intensity, corrected_intensity, compensation_factor,
+            badge_id, predicted_humidity, exposure_time, strip_intensity, estimated_h2s_ppm, data_source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         (
             str(worker_id).strip(),
@@ -534,7 +568,13 @@ def insert_reading(
             float(humidity),
             r_int,
             c_int,
-            float(compensation_factor)
+            float(compensation_factor),
+            resolved_badge_id,
+            p_hum,
+            float(exposure_time),
+            s_int,
+            e_ppm,
+            str(data_source)
         )
     )
 

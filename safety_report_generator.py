@@ -331,12 +331,13 @@ def generate_pdf_report(report_data: Dict[str, Any]) -> bytes:
     story.append(Spacer(1, 10))
 
     # 5. Prototype Environmental Compensation Notice
-    story.append(Paragraph("<b>3. Prototype Environmental Compensation Notice</b>", style_section))
+    story.append(Paragraph("<b>3. Prototype Calibration & Inference Disclaimer</b>", style_section))
     proto_text = (
-        "⚠️ <b>EXPERIMENTAL PROTOTYPE NOTICE:</b> Ambient temperature (°C) and relative humidity (%) compensation "
-        "factors (CF) reflect a theoretical kinetic adjustment model normalized against standard reference baseline "
-        "(T_ref = 25.0°C, RH_ref = 50.0%). <i>Official regulatory dose compliance continues to rely upon uncompensated "
-        "optical ML calibration curves until empirical multi-chamber environmental validation is complete.</i>"
+        "⚠️ <b>PROTOTYPE ESTIMATE NOTICE:</b> "
+        "Prototype estimate — trained using simulated reference-image calibration data. "
+        "Not a validated occupational safety measurement. Ambient temperature (°C), relative humidity (%), "
+        "and exposure duration (hours) are integrated via multi-variable RandomForest and KNN models. "
+        "<i>Do not use as an experimentally validated safety measurement.</i>"
     )
     t_proto = Table([[Paragraph(proto_text, style_disclaimer)]], colWidths=[520])
     t_proto.setStyle(TableStyle([
@@ -353,30 +354,31 @@ def generate_pdf_report(report_data: Dict[str, Any]) -> bytes:
     if df_r.empty:
         story.append(Paragraph("<i>No scan records logged in the selected time window.</i>", style_disclaimer))
     else:
-        scan_rows = [["ID", "Worker", "Timestamp", "Dose (ppm*hr)", "Raw Int", "T (°C)", "RH (%)", "CF*", "Corr Int*", "Risk Level"]]
+        scan_rows = [["ID", "Worker", "Timestamp", "H2S (ppm)", "Exp (h)", "Dose (ppm*h)", "T (°C)", "RH (%)", "Risk Level", "Source"]]
         # Limit to last 15 scans in PDF to prevent multi-page overflow
         for _, r in df_r.head(15).iterrows():
             ts_str = str(r["timestamp"])[:16].replace("T", " ")
-            r_int = f"{float(r.get('raw_intensity', r['intensity'])):.3f}"
-            c_int = f"{float(r.get('corrected_intensity', r['intensity'])):.3f}"
-            cf_val = f"{float(r.get('compensation_factor', 1.0)):.3f}"
+            h2s_val = f"{float(r.get('estimated_h2s_ppm', r['dose'])):.2f}"
+            exp_val = f"{float(r.get('exposure_time', 1.0)):.1f}"
+            dose_val = f"{float(r['dose']):.2f}"
             temp_val = f"{float(r.get('temperature', 25.0)):.1f}"
-            rh_val = f"{float(r.get('humidity', 50.0)):.0f}%"
+            rh_val = f"{float(r.get('predicted_humidity', r.get('humidity', 50.0))):.0f}%"
+            src_val = "Simulated" if "SIMULATED" in str(r.get("data_source", "")) else "Standard"
 
             scan_rows.append([
                 str(r["id"]),
                 str(r["worker_id"]),
                 ts_str,
-                f"{float(r['dose']):.2f}",
-                r_int,
+                h2s_val,
+                exp_val,
+                dose_val,
                 temp_val,
                 rh_val,
-                cf_val,
-                c_int,
-                str(r["risk_level"]).split(" ")[0]
+                str(r["risk_level"]).split(" ")[0],
+                src_val
             ])
 
-        t_scans = Table(scan_rows, colWidths=[25, 45, 80, 60, 42, 38, 38, 38, 44, 50])
+        t_scans = Table(scan_rows, colWidths=[24, 42, 78, 52, 38, 56, 38, 40, 52, 50])
         t_scans.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), slate),
             ('TEXTCOLOR', (0,0), (-1,0), colors.white),
@@ -423,39 +425,47 @@ def generate_csv_report(report_data: Dict[str, Any]) -> str:
 
     if "temperature" not in df_r.columns:
         df_r["temperature"] = 25.0
-    if "humidity" not in df_r.columns:
-        df_r["humidity"] = 50.0
-    if "compensation_factor" not in df_r.columns:
-        df_r["compensation_factor"] = 1.0
-    if "corrected_intensity" not in df_r.columns:
-        df_r["corrected_intensity"] = df_r["intensity"]
+    if "predicted_humidity" not in df_r.columns:
+        df_r["predicted_humidity"] = df_r.get("humidity", 50.0)
+    if "exposure_time" not in df_r.columns:
+        df_r["exposure_time"] = 1.0
+    if "estimated_h2s_ppm" not in df_r.columns:
+        df_r["estimated_h2s_ppm"] = df_r["dose"]
+    if "data_source" not in df_r.columns:
+        df_r["data_source"] = "SIMULATED_REFERENCE_IMAGE_MODEL"
+    if "badge_id" not in df_r.columns:
+        df_r["badge_id"] = ""
     if "raw_intensity" not in df_r.columns:
         df_r["raw_intensity"] = df_r["intensity"]
 
     df_export = df_r[[
         "id",
         "worker_id",
+        "badge_id",
         "timestamp",
+        "estimated_h2s_ppm",
+        "exposure_time",
         "dose",
         "raw_intensity",
         "temperature",
-        "humidity",
-        "compensation_factor",
-        "corrected_intensity",
+        "predicted_humidity",
         "risk_level",
+        "data_source",
         "is_expired",
         "expiry_status_message"
     ]].rename(columns={
         "id": "Scan Record ID",
         "worker_id": "Worker ID",
+        "badge_id": "Badge ID",
         "timestamp": "Scan Timestamp",
-        "dose": "Dose (ppm*hr)",
+        "estimated_h2s_ppm": "Estimated H2S (ppm)",
+        "exposure_time": "Shift Duration (hours)",
+        "dose": "Cumulative Dose (ppm*hr)",
         "raw_intensity": "Raw Optical Intensity",
         "temperature": "Ambient Temp (deg C)",
-        "humidity": "Ambient RH (%)",
-        "compensation_factor": "Prototype Comp Factor (CF)",
-        "corrected_intensity": "Prototype Corrected Intensity",
+        "predicted_humidity": "Predicted Relative Humidity (%)",
         "risk_level": "Safety Risk Classification",
+        "data_source": "Dataset Model Source",
         "is_expired": "Badge Expired Flag",
         "expiry_status_message": "Badge Status Message"
     })

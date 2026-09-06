@@ -27,18 +27,26 @@ import exposure_forecaster
 importlib.reload(exposure_forecaster)
 import expiry_checker
 import generate_test_images
+import inference_engine
+importlib.reload(inference_engine)
 import qr_manager
 importlib.reload(qr_manager)
 import quality_validator
 importlib.reload(quality_validator)
+import roi_detector
+importlib.reload(roi_detector)
 import safety_report_generator
 importlib.reload(safety_report_generator)
 import strip_reader
 import train_all_models
+import train_reference_models
 
 # Train ML models on empirical calibration & expiry datasets at startup if missing
 if not os.path.exists("dose_model.pkl") or not os.path.exists("expiry_classifier.pkl"):
     train_all_models.main()
+
+if not os.path.exists("models/h2s_demo_model.joblib") or not os.path.exists("models/humidity_demo_model.joblib"):
+    train_reference_models.train_all_reference_models()
 
 # Auto-generate annotated test images with box labels & gradient line indicators
 generate_test_images.generate_all_test_assets()
@@ -460,9 +468,9 @@ elif page == "Scan Strip":
             if camera_file is not None:
                 image_bytes_to_process = camera_file.getvalue()
 
-        # Step 3: Ambient Environmental Conditions
-        st.subheader("Step 3: Ambient Environmental Conditions")
-        st.caption("Enter measured ambient temperature and relative humidity at the exposure location for prototype environmental compensation.")
+        # Step 3: Ambient Environmental Conditions & Exposure Duration
+        st.subheader("Step 3: Exposure & Environmental Parameters")
+        st.caption("Configure shift duration, ambient temperature, and relative humidity for ML sensor inference.")
 
         env_c1, env_c2 = st.columns(2)
         with env_c1:
@@ -473,29 +481,55 @@ elif page == "Scan Strip":
                 value=25.0,
                 step=0.5,
                 format="%.1f",
-                help="Reference baseline is 25.0°C. Higher temperatures increase optical reaction kinetics."
+                help="Reference baseline is 25.0°C. Temperature affects lead acetate chemical reaction kinetics."
+            )
+            exposure_time = st.number_input(
+                "⏱️ Shift Exposure Duration (hours)",
+                min_value=0.5,
+                max_value=24.0,
+                value=1.0,
+                step=0.5,
+                format="%.1f",
+                help="Exposure time duration in hours used by the RandomForest model to estimate H2S concentration and cumulative dose."
             )
         with env_c2:
-            ambient_humidity = st.number_input(
-                "💧 Relative Humidity (%)",
-                min_value=0.0,
-                max_value=100.0,
-                value=50.0,
-                step=1.0,
-                format="%.1f",
-                help="Reference baseline is 50.0% RH. Elevated humidity promotes accelerated chromophore staining."
+            humidity_input_mode = st.radio(
+                "💧 Relative Humidity Source",
+                ["🤖 Optical Humidity Card (KNN)", "✏️ Manual Ambient Input (%)"],
+                horizontal=True
             )
+            manual_humidity = None
+            if humidity_input_mode == "✏️ Manual Ambient Input (%)":
+                manual_humidity = st.number_input(
+                    "💧 Manual Ambient RH (%)",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=50.0,
+                    step=1.0,
+                    format="%.1f",
+                    help="Manual hygrometer measurement override."
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style="background-color: #1E293B; border-left: 3px solid #38BDF8; padding: 0.5rem 0.75rem; border-radius: 0.35rem; margin-top: 0.25rem;">
+                        <span style="font-size: 0.8rem; color: #94A3B8;">KNN Indicator Card Model:</span><br/>
+                        <span style="font-size: 0.78rem; color: #E0F2FE;">Relative humidity will be dynamically extracted and classified from the circular humidity card on the badge.</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
         # Dynamic live preview of prototype compensation factor
-        comp_preview = environmental_compensation.calculate_compensation_factor(ambient_temp, ambient_humidity)
+        comp_preview = environmental_compensation.calculate_compensation_factor(ambient_temp, manual_humidity if manual_humidity is not None else 50.0)
         live_cf = comp_preview["compensation_factor"]
         cf_pct_diff = (live_cf - 1.0) * 100.0
         cf_color = "#34D399" if abs(cf_pct_diff) < 0.1 else ("#FBBF24" if live_cf > 1.0 else "#60A5FA")
 
         st.markdown(
             f"""
-            <div style="background-color: #1E293B; border-left: 3px solid {cf_color}; padding: 0.5rem 0.75rem; border-radius: 0.35rem; margin-top: 0.25rem; margin-bottom: 0.75rem;">
-                <span style="font-size: 0.8rem; color: #94A3B8;">Prototype Compensation Factor (CF):</span>
+            <div style="background-color: #1E293B; border-left: 3px solid {cf_color}; padding: 0.5rem 0.75rem; border-radius: 0.35rem; margin-top: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 0.8rem; color: #94A3B8;">Prototype Kinetic Factor (CF):</span>
                 <strong style="color: {cf_color}; font-size: 0.9rem; margin-left: 0.5rem;">{live_cf:.4f}</strong>
                 <span style="font-size: 0.75rem; color: #CBD5E1; margin-left: 0.4rem;">({'+' if cf_pct_diff >= 0 else ''}{cf_pct_diff:.1f}% vs 25°C/50% RH)</span>
             </div>
@@ -506,28 +540,35 @@ elif page == "Scan Strip":
     with col2:
         is_quality_valid = False
         quality_diag = None
+        roi_detections = None
+        preview_bgr = None
 
         if image_bytes_to_process is not None:
-            st.image(
-                image_bytes_to_process,
-                caption="Dosimeter Image Preview",
-                use_container_width=True,
-            )
-
-            # Decode image buffer for pre-flight quality validation
+            # Decode image buffer for pre-flight quality validation and ROI extraction
             file_bytes = np.frombuffer(image_bytes_to_process, dtype=np.uint8)
             preview_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
             if preview_bgr is not None:
                 quality_diag = quality_validator.evaluate_image_quality(preview_bgr)
                 is_quality_valid = quality_diag["is_valid_for_analysis"]
+                roi_detections = roi_detector.detect_all_rois(preview_bgr)
+
+                # Show preview tabs: Annotated Multi-ROI Visual Overlay vs Raw Image
+                tab_preview_roi, tab_preview_raw = st.tabs(["🎯 Detected ROIs Overlay", "📷 Original Photo"])
+                
+                with tab_preview_roi:
+                    annotated_img = roi_detector.draw_roi_visual_overlay(preview_bgr, roi_detections)
+                    annotated_rgb = cv2.cvtColor(annotated_img, cv2.COLOR_BGR2RGB)
+                    st.image(annotated_rgb, caption="Detected Sensor Regions & Central Sampling Zones", use_container_width=True)
+
+                with tab_preview_raw:
+                    st.image(image_bytes_to_process, caption="Original Dosimeter Photo", use_container_width=True)
 
                 # -------------------------------------------------------------
                 # SCAN QUALITY STATUS & REGION DETECTION DASHBOARD
                 # -------------------------------------------------------------
-                st.markdown("<h4 class='section-header'>🔬 Pre-Flight Scan Quality & Region Detection</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 class='section-header'>🔬 Pre-Flight Scan Quality & Region Verification</h4>", unsafe_allow_html=True)
 
-                # Quality Status Badge
                 q_status = quality_diag["quality_status"]
                 if q_status == "Good":
                     status_badge_html = """
@@ -562,7 +603,7 @@ elif page == "Scan Strip":
                         <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if ref_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
                             <div style="font-size: 0.75rem; color: #94A3B8;">📌 Reference Scale</div>
                             <strong style="color: {'#34D399' if ref_ok else '#F87171'}; font-size: 0.82rem;">
-                                {'✅ Detected (5 Swatches)' if ref_ok else '❌ Not Detected'}
+                                {'✅ Detected (5-Step)' if ref_ok else '❌ Not Detected'}
                             </strong>
                         </div>
                         """,
@@ -574,7 +615,7 @@ elif page == "Scan Strip":
                     st.markdown(
                         f"""
                         <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if strip_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
-                            <div style="font-size: 0.75rem; color: #94A3B8;">🧪 Sensor Strip</div>
+                            <div style="font-size: 0.75rem; color: #94A3B8;">🧪 H2S Sensor ROI</div>
                             <strong style="color: {'#34D399' if strip_ok else '#F87171'}; font-size: 0.82rem;">
                                 {'✅ Detected (Active)' if strip_ok else '❌ Not Detected'}
                             </strong>
@@ -584,13 +625,13 @@ elif page == "Scan Strip":
                     )
 
                 with ind_col3:
-                    expiry_ok = quality_diag["expiry_patch_detected"]
+                    hum_ok = roi_detections["humidity_indicator"]["confidence"] >= 0.50
                     st.markdown(
                         f"""
-                        <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if expiry_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
-                            <div style="font-size: 0.75rem; color: #94A3B8;">🛡️ Expiry Patch</div>
-                            <strong style="color: {'#34D399' if expiry_ok else '#F87171'}; font-size: 0.82rem;">
-                                {'✅ Detected (Patch)' if expiry_ok else '❌ Not Detected'}
+                        <div style="background-color: #1E293B; border-left: 3px solid {'#10B981' if hum_ok else '#EF4444'}; padding: 0.6rem; border-radius: 0.4rem;">
+                            <div style="font-size: 0.75rem; color: #94A3B8;">💧 Humidity Card</div>
+                            <strong style="color: {'#34D399' if hum_ok else '#F87171'}; font-size: 0.82rem;">
+                                {'✅ Detected (Circle)' if hum_ok else '❌ Not Detected'}
                             </strong>
                         </div>
                         """,
@@ -611,268 +652,161 @@ elif page == "Scan Strip":
                         unsafe_allow_html=True
                     )
 
-                # Diagnostics Metric Chips
-                st.caption(
-                    f"📊 **Diagnostic Metrics:** Sharpness Score: `{quality_diag['sharpness_score']}` (min: 35.0) &nbsp;|&nbsp; "
-                    f"Mean Brightness: `{quality_diag['brightness_score']}/255` &nbsp;|&nbsp; "
-                    f"Contrast Std: `{quality_diag['contrast_score']}`"
-                )
-
-                # Quality Blocking Alerts or Warnings
+                # Quality Blocking Alerts
                 if not is_quality_valid:
                     st.error(
                         "🚨 **Scan Analysis Blocked — Image Quality Issues Detected:**\n" +
                         "\n".join([f"• {r}" for r in quality_diag["reasons"]])
                     )
-                elif quality_diag["warnings"]:
-                    st.caption("ℹ️ " + " ".join(quality_diag["warnings"]))
         else:
             st.info("📷 Image preview will appear here after selecting a sample, uploading a file, or taking a photo.")
-
-        # Image Region Block Boxes & Risk Level Cards
-        st.markdown("<h4 class='section-header'>📌 Image Region (Box) Breakdown</h4>", unsafe_allow_html=True)
-
-        box_col1, box_col2, box_col3 = st.columns(3)
-
-        with box_col1:
-            st.markdown(
-                """
-                <div style="background-color: #1E293B; border-left: 4px solid #64748B; padding: 1rem; border-radius: 0.5rem; height: 100%;">
-                    <h5 style="color: #94A3B8; margin-top: 0;">1. Left Vertical Box</h5>
-                    <strong style="color: #F8FAFC;">Reference Color Scale</strong>
-                    <p style="font-size: 0.85rem; color: #CBD5E1; margin-top: 0.5rem; margin-bottom: 0;">
-                        5 calibrated swatches (White → Black) used by <code>calibration.py</code> for per-channel OLS lighting correction.
-                    </p>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-        with box_col2:
-            st.markdown(
-                """
-                <div style="background-color: #1E293B; border-left: 4px solid #3B82F6; padding: 1rem; border-radius: 0.5rem; height: 100%;">
-                    <h5 style="color: #60A5FA; margin-top: 0;">2. Main Center Box</h5>
-                    <strong style="color: #F8FAFC;">H₂S Sensor Paper</strong>
-                    <p style="font-size: 0.85rem; color: #CBD5E1; margin-top: 0.5rem; margin-bottom: 0;">
-                        Colorimetric indicator paper that darkens proportionally upon exposure to H₂S gas (Intensity → Dose).
-                    </p>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-        with box_col3:
-            st.markdown(
-                """
-                <div style="background-color: #1E293B; border-left: 4px solid #22C55E; padding: 1rem; border-radius: 0.5rem; height: 100%;">
-                    <h5 style="color: #4ADE80; margin-top: 0;">3. Bottom-Right Box</h5>
-                    <strong style="color: #F8FAFC;">Badge Expiry Patch</strong>
-                    <p style="font-size: 0.85rem; color: #CBD5E1; margin-top: 0.5rem; margin-bottom: 0;">
-                        Passive shelf-life patch analyzed via 3D HSV Euclidean distance (Fresh Green vs Expired Red).
-                    </p>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-        st.markdown("<h4 class='section-header'>⚠️ Exposure Risk Level Thresholds</h4>", unsafe_allow_html=True)
-
-        tier_col1, tier_col2, tier_col3 = st.columns(3)
-
-        with tier_col1:
-            st.markdown(
-                """
-                <div style="background-color: #064E3B; border-left: 4px solid #10B981; padding: 0.85rem; border-radius: 0.5rem;">
-                    <strong style="color: #A7F3D0;">🟢 Safe Tier (< 10.0 ppm*hr)</strong>
-                    <p style="font-size: 0.8rem; color: #D1FAE5; margin-top: 0.25rem; margin-bottom: 0;">
-                        Below 8-hr TWA limit. Safe for routine workplace operations.
-                    </p>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-        with tier_col2:
-            st.markdown(
-                """
-                <div style="background-color: #78350F; border-left: 4px solid #F59E0B; padding: 0.85rem; border-radius: 0.5rem;">
-                    <strong style="color: #FDE68A;">🟡 Caution Tier (10 - 50 ppm*hr)</strong>
-                    <p style="font-size: 0.8rem; color: #FEF3C7; margin-top: 0.25rem; margin-bottom: 0;">
-                        Approaching safe limits. Recommended shift rotation / check.
-                    </p>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-        with tier_col3:
-            st.markdown(
-                """
-                <div style="background-color: #7F1D1D; border-left: 4px solid #EF4444; padding: 0.85rem; border-radius: 0.5rem;">
-                    <strong style="color: #FCA5A5;">🔴 Unsafe Tier (≥ 50.0 ppm*hr)</strong>
-                    <p style="font-size: 0.8rem; color: #FEE2E2; margin-top: 0.25rem; margin-bottom: 0;">
-                        Exceeds safe limits. <b>Immediate work stoppage & medical review!</b>
-                    </p>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
 
         # Button is disabled until valid worker_id, image supplied, and image passes quality checks
         is_disabled = not (is_worker_id_valid and image_bytes_to_process is not None and is_quality_valid)
 
         analyze_clicked = st.button(
-            "🔍 Analyze", disabled=is_disabled, type="primary", use_container_width=True
+            "🔍 Analyze Dosimeter Badge", disabled=is_disabled, type="primary", use_container_width=True
         )
 
         if not is_quality_valid and image_bytes_to_process is not None:
             st.caption("🔒 *Analysis disabled: please resolve the image quality issues indicated above or upload a clearer photo.*")
 
-        if analyze_clicked and image_bytes_to_process is not None:
-            with st.spinner("Processing image through calibration & ML model..."):
+        if analyze_clicked and image_bytes_to_process is not None and preview_bgr is not None:
+            with st.spinner("Executing multi-ROI lighting compensation, Humidity KNN & H2S RandomForest inference..."):
                 try:
-                    # Decode image buffer into OpenCV BGR numpy array
-                    file_bytes = np.frombuffer(image_bytes_to_process, dtype=np.uint8)
-                    raw_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+                    pipeline = inference_engine.get_inference_pipeline()
+                    inf_res = pipeline.run_full_inference(
+                        image_bgr=preview_bgr,
+                        temperature_c=ambient_temp,
+                        exposure_time_h=exposure_time,
+                        manual_humidity_override=manual_humidity
+                    )
 
-                    if raw_bgr is None:
-                        raise ValueError("Failed to decode image data.")
-
-                    # Pipeline Step 1: Lighting Correction (Raises ReferenceScaleNotFoundError if failed)
-                    calibrated_bgr = calibration.calibrate_image(raw_bgr)
-
-                    # Pipeline Step 2: Extract Sensor Strip Color & Staining Intensity
-                    strip_res = strip_reader.read_strip(calibrated_bgr)
-                    intensity = strip_res["intensity"]
-
-                    # Pipeline Step 3: Polynomial Regression Dose Estimation (Standard ML pipeline unchanged)
-                    dose_res = dose_model.predict_dose(intensity)
-                    predicted_dose = dose_res["dose"]
-                    risk_level = dose_res["risk_level"]
-                    confidence_note = dose_res["confidence_note"]
-
-                    # Pipeline Step 4: Expiry Indicator Patch Verification
-                    expiry_res = expiry_checker.check_badge_validity(calibrated_bgr)
+                    # Expiry patch check
+                    expiry_res = expiry_checker.check_badge_validity(preview_bgr)
                     is_expired = expiry_res["is_expired"]
                     expiry_status_msg = expiry_res["status_message"]
 
-                    # Pipeline Step 5: Prototype Environmental Compensation Calculation
-                    env_comp_res = environmental_compensation.apply_environmental_compensation(
-                        raw_intensity=intensity,
-                        temperature=ambient_temp,
-                        humidity=ambient_humidity
-                    )
-                    compensation_factor = env_comp_res["compensation_factor"]
-                    corrected_intensity = env_comp_res["corrected_intensity"]
-                    estimated_dose_corrected = env_comp_res["estimated_dose_corrected"]
-
-                    # Pipeline Step 6: Save Reading Record to Database (with environmental parameters)
+                    # Save to database
                     record_id = database.insert_reading(
                         worker_id=worker_id_clean,
-                        intensity=intensity,
-                        dose=predicted_dose,
-                        risk_level=risk_level,
+                        intensity=inf_res["staining_intensity"],
+                        dose=inf_res["cumulative_dose_ppm_h"],
+                        risk_level=inf_res["risk_level"],
                         is_expired=is_expired,
                         expiry_status_message=expiry_status_msg,
                         temperature=ambient_temp,
-                        humidity=ambient_humidity,
-                        raw_intensity=intensity,
-                        corrected_intensity=corrected_intensity,
-                        compensation_factor=compensation_factor,
+                        humidity=inf_res["predicted_humidity"],
+                        raw_intensity=inf_res["staining_intensity"],
+                        corrected_intensity=inf_res["staining_intensity"],
+                        compensation_factor=1.0,
+                        predicted_humidity=inf_res["predicted_humidity"],
+                        exposure_time=exposure_time,
+                        strip_intensity=inf_res["staining_intensity"],
+                        estimated_h2s_ppm=inf_res["estimated_h2s_ppm"],
+                        data_source="SIMULATED_REFERENCE_IMAGE_MODEL"
                     )
 
-                    # Fetch updated cumulative exposure dose for worker
                     cumulative_dose = database.get_cumulative_dose(worker_id_clean)
 
-                    # Display successful analysis results
-                    st.success(f"Analysis Complete! Record ID #{record_id} Logged.")
-
-                    m_col1, m_col2, m_col3 = st.columns(3)
-                    with m_col1:
-                        st.metric("Current Exposure Dose", f"{predicted_dose:.2f} ppm*hr")
-                    with m_col2:
-                        st.metric("Total Cumulative Exposure", f"{cumulative_dose:.2f} ppm*hr")
-                    with m_col3:
-                        st.metric("Staining Intensity (Raw)", f"{intensity:.4f}")
-
-                    # Risk Level Banner
-                    if risk_level == "Safe":
-                        st.success(f"🟢 **Risk Level: {risk_level}**")
-                    elif risk_level == "Caution":
-                        st.warning(f"🟡 **Risk Level: {risk_level}**")
-                    else:
-                        st.error(f"🔴 **Risk Level: {risk_level}**")
-
-                    # Expiry Status Banner
-                    if is_expired:
-                        st.error(f"❌ **Badge Status:** {expiry_status_msg}")
-                    else:
-                        st.info(f"✅ **Badge Status:** {expiry_status_msg}")
-
-                    st.caption(f"ℹ️ **Confidence Note:** {confidence_note}")
-
-                    # -------------------------------------------------------------
-                    # EXPERIMENTAL ENVIRONMENTAL COMPENSATION PANEL
-                    # -------------------------------------------------------------
-                    st.markdown("<h4 class='section-header'>🌡️ Prototype Environmental Compensation</h4>", unsafe_allow_html=True)
-
+                    # Mandatory Prototype Disclaimer Banner
                     st.markdown(
-                        """
-                        <div style="background-color: rgba(245, 158, 11, 0.12); border: 1px solid #F59E0B; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.85rem;">
-                            <div style="display: flex; align-items: center; justify-content: space-between;">
-                                <strong style="color: #FBBF24; font-size: 0.92rem;">⚠️ EXPERIMENTAL / PROTOTYPE COMPENSATION</strong>
-                                <span style="background-color: rgba(245, 158, 11, 0.25); color: #FDE68A; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
-                                    UNVALIDATED MODEL
-                                </span>
-                            </div>
-                            <p style="font-size: 0.82rem; color: #FDE68A; margin-top: 0.35rem; margin-bottom: 0;">
-                                This prototype model adjusts for reaction kinetic shifts at non-standard ambient temperature and humidity ($T_{ref}=25^\\circ\\text{C}, RH_{ref}=50\\%$).
-                                <b>Official dose reporting uses the standard ML pipeline until chamber calibration validation is completed.</b>
+                        f"""
+                        <div style="background-color: rgba(234, 88, 12, 0.12); border: 1px solid #EA580C; border-left: 4px solid #EA580C; border-radius: 0.5rem; padding: 0.85rem 1rem; margin-top: 1rem; margin-bottom: 1rem;">
+                            <strong style="color: #F97316; font-size: 0.95rem;">⚠️ PROTOTYPE ESTIMATE DISCLAIMER</strong>
+                            <p style="font-size: 0.84rem; color: #FED7AA; margin-top: 0.35rem; margin-bottom: 0;">
+                                {inference_engine.PROTOTYPE_DISCLAIMER}
                             </p>
                         </div>
                         """,
                         unsafe_allow_html=True
                     )
 
-                    env_m1, env_m2, env_m3, env_m4 = st.columns(4)
-                    with env_m1:
+                    st.success(f"✅ **Analysis Complete & Logged!** Record ID `#{record_id}` saved against Worker `{worker_id_clean}`.")
+
+                    # Primary Metrics Grid
+                    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+                    with m_col1:
                         st.metric(
-                            label="Raw Intensity",
-                            value=f"{intensity:.4f}",
-                            help="Direct optical staining score extracted from the calibrated sensor strip"
+                            "Estimated H₂S Gas",
+                            f"{inf_res['estimated_h2s_ppm']:.2f} ppm",
+                            help="Predicted by RandomForestRegressor using extracted color features + temperature + humidity + exposure time"
                         )
-                    with env_m2:
+                    with m_col2:
                         st.metric(
-                            label="Compensation Factor",
-                            value=f"{compensation_factor:.4f}",
-                            delta=f"{(compensation_factor - 1.0)*100.0:+.1f}%",
-                            help="Correction multiplier based on ambient T and RH vs reference conditions"
+                            "Relative Humidity",
+                            f"{inf_res['predicted_humidity']:.1f}% RH",
+                            help=f"Source: {inf_res['humidity_source']}"
                         )
-                    with env_m3:
+                    with m_col3:
                         st.metric(
-                            label="Corrected Intensity",
-                            value=f"{corrected_intensity:.4f}",
-                            delta=f"{(corrected_intensity - intensity):+.4f}",
-                            help="Normalized optical intensity after environmental compensation: Raw / CF"
+                            "Cumulative Exposure",
+                            f"{inf_res['cumulative_dose_ppm_h']:.2f} ppm*hr",
+                            delta=f"Total: {cumulative_dose:.2f} ppm*hr",
+                            help="Shift dose (ppm * hours) and total worker cumulative exposure"
                         )
-                    with env_m4:
+                    with m_col4:
                         st.metric(
-                            label="Estimated Dose",
-                            value=f"{estimated_dose_corrected:.2f} ppm*hr",
-                            delta=f"{(estimated_dose_corrected - predicted_dose):+.2f} ppm*hr",
-                            help="Dose calculated using corrected intensity via polynomial model"
+                            "Staining Intensity",
+                            f"{inf_res['staining_intensity']:.4f}",
+                            help="Normalized surface reflectance darkening score (0.0 to 1.0)"
                         )
 
-                    st.caption(f"📋 **Compensation Analysis:** {env_comp_res['explanation']}")
-
-                except calibration.ReferenceScaleNotFoundError as e:
-                    st.warning(
-                        "Could not detect the reference color scale — please retake the photo "
-                        "making sure the full strip and reference scale are visible and well-lit."
+                    # Risk Level Banner
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #1E293B; border-left: 4px solid {inf_res['risk_color']}; padding: 0.85rem; border-radius: 0.5rem; margin-top: 0.75rem; margin-bottom: 0.75rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <strong style="color: #F8FAFC; font-size: 1rem;">🛡️ Risk Classification: <span style="color: {inf_res['risk_color']};">{inf_res['risk_level']}</span></strong>
+                                <span style="background-color: {inf_res['risk_color']}33; color: {inf_res['risk_color']}; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                    {inf_res['risk_level'].upper()}
+                                </span>
+                            </div>
+                            <p style="font-size: 0.83rem; color: #CBD5E1; margin-top: 0.35rem; margin-bottom: 0;">
+                                📋 {inf_res['action_guidance']}
+                            </p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
                     )
+
+                    # Expiry Status Banner
+                    if is_expired:
+                        st.error(f"❌ **Badge Expiry Status:** {expiry_status_msg}")
+                    else:
+                        st.info(f"✅ **Badge Expiry Status:** {expiry_status_msg}")
+
+                    # ---------------------------------------------------------
+                    # DETECTED ROI VISUAL VERIFICATION & FEATURE BREAKDOWN
+                    # ---------------------------------------------------------
+                    st.markdown("<h4 class='section-header'>🔬 Extracted Sensor ROIs & Optical Color Features</h4>", unsafe_allow_html=True)
+
+                    roi_v_col1, roi_v_col2 = st.columns(2)
+                    
+                    with roi_v_col1:
+                        h2s_b = inf_res["roi_detections"]["h2s_strip"]["box"]
+                        h2s_crop = preview_bgr[h2s_b[1]:h2s_b[3], h2s_b[0]:h2s_b[2]]
+                        if h2s_crop.size > 0:
+                            st.image(cv2.cvtColor(h2s_crop, cv2.COLOR_BGR2RGB), caption="Detected H2S Sensor Strip ROI (Center Sampled)", use_container_width=True)
+                        h_feat = inf_res["h2s_features"]
+                        st.caption(
+                            f"🎨 **H2S Optical Features:** RGB: `({h_feat['mean_r']:.1f}, {h_feat['mean_g']:.1f}, {h_feat['mean_b']:.1f})` | "
+                            f"HSV: `(H={h_feat['hue']:.1f}, S={h_feat['sat']:.1f}, V={h_feat['val']:.1f})` | Grayscale: `{h_feat['gray']:.1f}`"
+                        )
+
+                    with roi_v_col2:
+                        hum_b = inf_res["roi_detections"]["humidity_indicator"]["box"]
+                        hum_crop = preview_bgr[hum_b[1]:hum_b[3], hum_b[0]:hum_b[2]]
+                        if hum_crop.size > 0:
+                            st.image(cv2.cvtColor(hum_crop, cv2.COLOR_BGR2RGB), caption="Detected Humidity Card ROI (Central Disc)", use_container_width=True)
+                        u_feat = inf_res["humidity_features"]
+                        st.caption(
+                            f"💧 **Humidity Optical Features:** RGB: `({u_feat['mean_r']:.1f}, {u_feat['mean_g']:.1f}, {u_feat['mean_b']:.1f})` | "
+                            f"HSV: `(H={u_feat['hue']:.1f}, S={u_feat['sat']:.1f}, V={u_feat['val']:.1f})`"
+                        )
+
                 except Exception as e:
-                    print(f"[ERROR] Scan Analysis Failed: {e}", file=sys.stderr)
+                    st.error(f"❌ Scan analysis failed: {e}")
 # -----------------------------------------------------------------------------
 # PAGE 3: WORKERS
 # -----------------------------------------------------------------------------
