@@ -23,6 +23,8 @@ importlib.reload(database)
 import dose_model
 import environmental_compensation
 importlib.reload(environmental_compensation)
+import exposure_forecaster
+importlib.reload(exposure_forecaster)
 import expiry_checker
 import generate_test_images
 import qr_manager
@@ -1545,7 +1547,113 @@ elif page == "Dashboard":
     st.divider()
 
     # -------------------------------------------------------------------------
-    # SECTION 3: BADGE EXPIRY ALERTS
+    # SECTION 3: EXPOSURE TREND FORECASTING & WORKERS AT RISK
+    # -------------------------------------------------------------------------
+    st.markdown("<h3 class='section-header'>📈 Exposure Trend Forecasting & Workers At Risk</h3>", unsafe_allow_html=True)
+    st.caption("Predictive trend analysis estimating recent exposure accumulation rates and projected time until personnel reach Warning (10.0 ppm*hr) or Critical (50.0 ppm*hr) exposure thresholds.")
+
+    # Disclaimer / Estimation Note
+    st.markdown(
+        """
+        <div style="background-color: rgba(59, 130, 246, 0.1); border-left: 4px solid #3B82F6; padding: 0.75rem 1rem; border-radius: 0.4rem; margin-bottom: 0.85rem;">
+            <span style="color: #60A5FA; font-weight: 700; font-size: 0.85rem;">ℹ️ STATISTICAL PROJECTION NOTICE:</span>
+            <span style="font-size: 0.82rem; color: var(--text-color, #94A3B8); margin-left: 0.35rem;">
+                Exposure forecasts are mathematical estimations calculated strictly from real chronological SQLite scan intervals.
+                Predictions require a minimum of 2 historical readings per worker to establish a valid accumulation slope.
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    all_forecasts = exposure_forecaster.get_all_workers_forecast_summary()
+
+    # Filter into Active Projections vs Insufficient Data
+    active_projections = [f for f in all_forecasts if f["status"] in ("active_forecast", "exceeded_critical", "stable")]
+    insufficient_workers = [f for f in all_forecasts if f["status"] == "insufficient_data"]
+
+    # Table of Workers At Risk / Forecasting Summary
+    if active_projections:
+        forecast_table_rows = []
+        for f in active_projections:
+            rate_str = f"+{f['daily_rate']:.2f} ppm*hr/day" if f['daily_rate'] is not None else "—"
+            
+            if f["status"] == "exceeded_critical":
+                warn_proj = "Exceeded (Critical)"
+                crit_proj = "🚨 EXCEEDED (≥50 ppm*hr)"
+            elif f["days_to_warning"] is None:
+                warn_proj = "In Warning Tier"
+                crit_proj = f"~{f['days_to_critical']} days" if f['days_to_critical'] is not None else "—"
+            else:
+                warn_proj = f"~{f['days_to_warning']} days"
+                crit_proj = f"~{f['days_to_critical']} days" if f['days_to_critical'] is not None else "—"
+
+            forecast_table_rows.append({
+                "Worker ID": f["worker_id"],
+                "Name": f["name"],
+                "Work Zone": f["work_zone"],
+                "Cumulative Dose": f"{f['cumulative_dose']:.2f} ppm*hr",
+                "Daily Rate": rate_str,
+                "Proj. to Warning (10 ppm*hr)": warn_proj,
+                "Proj. to Critical (50 ppm*hr)": crit_proj,
+                "Trend Status": f["trend_badge"],
+                "Forecast Projection Message": f["forecast_message"]
+            })
+
+        df_fc_table = pd.DataFrame(forecast_table_rows)
+        st.dataframe(
+            df_fc_table[[
+                "Worker ID", "Name", "Work Zone", "Cumulative Dose",
+                "Daily Rate", "Proj. to Warning (10 ppm*hr)", "Proj. to Critical (50 ppm*hr)",
+                "Trend Status", "Forecast Projection Message"
+            ]],
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # Highlight top urgency forecast cards
+        top_urgent = [f for f in active_projections if f["status"] in ("active_forecast", "exceeded_critical")]
+        if top_urgent:
+            st.markdown("##### 🚨 Active Trajectories Requiring Supervisory Attention:")
+            for u in top_urgent[:3]:
+                if u["status"] == "exceeded_critical":
+                    card_bg = "#7F1D1D"
+                    card_border = "#EF4444"
+                    card_text_color = "#FEE2E2"
+                elif u["days_to_warning"] is not None and u["days_to_warning"] <= 7:
+                    card_bg = "#78350F"
+                    card_border = "#F59E0B"
+                    card_text_color = "#FEF3C7"
+                else:
+                    card_bg = "#1E293B"
+                    card_border = "#3B82F6"
+                    card_text_color = "#E2E8F0"
+
+                st.markdown(
+                    f"""
+                    <div style="background-color: {card_bg}; border-left: 4px solid {card_border}; padding: 0.75rem 1rem; border-radius: 0.4rem; margin-bottom: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong style="color: {card_text_color}; font-size: 0.92rem;">👤 {u['name']} (<code>{u['worker_id']}</code>) — {u['work_zone']}</strong>
+                            <span style="background-color: rgba(0,0,0,0.25); color: {card_border}; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                {u['trend_badge']}
+                            </span>
+                        </div>
+                        <p style="font-size: 0.82rem; color: {card_text_color}; margin-top: 0.35rem; margin-bottom: 0;">
+                            {u['forecast_message']}
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+    if insufficient_workers:
+        insuf_names = ", ".join([f"<b>{w['name']}</b> (<code>{w['worker_id']}</code>)" for w in insufficient_workers])
+        st.caption(f"ℹ️ *Insufficient chronological scan history for rate projection (< 2 scans logged):* {insuf_names}. Forecasts will automatically generate as additional shift scans are logged.")
+
+    st.divider()
+
+    # -------------------------------------------------------------------------
+    # SECTION 4: BADGE EXPIRY ALERTS
     # -------------------------------------------------------------------------
     st.markdown("<h3 class='section-header'>🛡️ Dosimeter Badge Expiry Alerts</h3>", unsafe_allow_html=True)
 
