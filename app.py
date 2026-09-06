@@ -21,6 +21,8 @@ import calibration
 import database
 importlib.reload(database)
 import dose_model
+import environmental_compensation
+importlib.reload(environmental_compensation)
 import expiry_checker
 import generate_test_images
 import qr_manager
@@ -448,6 +450,48 @@ elif page == "Scan Strip":
             if camera_file is not None:
                 image_bytes_to_process = camera_file.getvalue()
 
+        # Step 3: Ambient Environmental Conditions
+        st.subheader("Step 3: Ambient Environmental Conditions")
+        st.caption("Enter measured ambient temperature and relative humidity at the exposure location for prototype environmental compensation.")
+
+        env_c1, env_c2 = st.columns(2)
+        with env_c1:
+            ambient_temp = st.number_input(
+                "🌡️ Ambient Temp (°C)",
+                min_value=-10.0,
+                max_value=60.0,
+                value=25.0,
+                step=0.5,
+                format="%.1f",
+                help="Reference baseline is 25.0°C. Higher temperatures increase optical reaction kinetics."
+            )
+        with env_c2:
+            ambient_humidity = st.number_input(
+                "💧 Relative Humidity (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=50.0,
+                step=1.0,
+                format="%.1f",
+                help="Reference baseline is 50.0% RH. Elevated humidity promotes accelerated chromophore staining."
+            )
+
+        # Dynamic live preview of prototype compensation factor
+        live_cf = environmental_compensation.calculate_compensation_factor(ambient_temp, ambient_humidity)
+        cf_pct_diff = (live_cf - 1.0) * 100.0
+        cf_color = "#34D399" if abs(cf_pct_diff) < 0.1 else ("#FBBF24" if live_cf > 1.0 else "#60A5FA")
+
+        st.markdown(
+            f"""
+            <div style="background-color: #1E293B; border-left: 3px solid {cf_color}; padding: 0.5rem 0.75rem; border-radius: 0.35rem; margin-top: 0.25rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 0.8rem; color: #94A3B8;">Prototype Compensation Factor (CF):</span>
+                <strong style="color: {cf_color}; font-size: 0.9rem; margin-left: 0.5rem;">{live_cf:.4f}</strong>
+                <span style="font-size: 0.75rem; color: #CBD5E1; margin-left: 0.4rem;">({'+' if cf_pct_diff >= 0 else ''}{cf_pct_diff:.1f}% vs 25°C/50% RH)</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
     with col2:
         is_quality_valid = False
         quality_diag = None
@@ -691,7 +735,7 @@ elif page == "Scan Strip":
                     strip_res = strip_reader.read_strip(calibrated_bgr)
                     intensity = strip_res["intensity"]
 
-                    # Pipeline Step 3: Polynomial Regression Dose Estimation
+                    # Pipeline Step 3: Polynomial Regression Dose Estimation (Standard ML pipeline unchanged)
                     dose_res = dose_model.predict_dose(intensity)
                     predicted_dose = dose_res["dose"]
                     risk_level = dose_res["risk_level"]
@@ -702,7 +746,17 @@ elif page == "Scan Strip":
                     is_expired = expiry_res["is_expired"]
                     expiry_status_msg = expiry_res["status_message"]
 
-                    # Pipeline Step 5: Save Reading Record to Database
+                    # Pipeline Step 5: Prototype Environmental Compensation Calculation
+                    env_comp_res = environmental_compensation.apply_environmental_compensation(
+                        raw_intensity=intensity,
+                        temperature=ambient_temp,
+                        humidity=ambient_humidity
+                    )
+                    compensation_factor = env_comp_res["compensation_factor"]
+                    corrected_intensity = env_comp_res["corrected_intensity"]
+                    estimated_dose_corrected = env_comp_res["estimated_dose_corrected"]
+
+                    # Pipeline Step 6: Save Reading Record to Database (with environmental parameters)
                     record_id = database.insert_reading(
                         worker_id=worker_id_clean,
                         intensity=intensity,
@@ -710,6 +764,11 @@ elif page == "Scan Strip":
                         risk_level=risk_level,
                         is_expired=is_expired,
                         expiry_status_message=expiry_status_msg,
+                        temperature=ambient_temp,
+                        humidity=ambient_humidity,
+                        raw_intensity=intensity,
+                        corrected_intensity=corrected_intensity,
+                        compensation_factor=compensation_factor,
                     )
 
                     # Fetch updated cumulative exposure dose for worker
@@ -724,7 +783,7 @@ elif page == "Scan Strip":
                     with m_col2:
                         st.metric("Total Cumulative Exposure", f"{cumulative_dose:.2f} ppm*hr")
                     with m_col3:
-                        st.metric("Staining Intensity", f"{intensity:.4f}")
+                        st.metric("Staining Intensity (Raw)", f"{intensity:.4f}")
 
                     # Risk Level Banner
                     if risk_level == "Safe":
@@ -741,6 +800,60 @@ elif page == "Scan Strip":
                         st.info(f"✅ **Badge Status:** {expiry_status_msg}")
 
                     st.caption(f"ℹ️ **Confidence Note:** {confidence_note}")
+
+                    # -------------------------------------------------------------
+                    # EXPERIMENTAL ENVIRONMENTAL COMPENSATION PANEL
+                    # -------------------------------------------------------------
+                    st.markdown("<h4 style='margin-top: 1.4rem; color: #F8FAFC;'>🌡️ Prototype Environmental Compensation</h4>", unsafe_allow_html=True)
+
+                    st.markdown(
+                        """
+                        <div style="background-color: rgba(245, 158, 11, 0.12); border: 1px solid #F59E0B; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.85rem;">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <strong style="color: #FBBF24; font-size: 0.92rem;">⚠️ EXPERIMENTAL / PROTOTYPE COMPENSATION</strong>
+                                <span style="background-color: rgba(245, 158, 11, 0.25); color: #FDE68A; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                    UNVALIDATED MODEL
+                                </span>
+                            </div>
+                            <p style="font-size: 0.82rem; color: #FDE68A; margin-top: 0.35rem; margin-bottom: 0;">
+                                This prototype model adjusts for reaction kinetic shifts at non-standard ambient temperature and humidity ($T_{ref}=25^\\circ\\text{C}, RH_{ref}=50\\%$).
+                                <b>Official dose reporting uses the standard ML pipeline until chamber calibration validation is completed.</b>
+                            </p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                    env_m1, env_m2, env_m3, env_m4 = st.columns(4)
+                    with env_m1:
+                        st.metric(
+                            label="Raw Intensity",
+                            value=f"{intensity:.4f}",
+                            help="Direct optical staining score extracted from the calibrated sensor strip"
+                        )
+                    with env_m2:
+                        st.metric(
+                            label="Compensation Factor",
+                            value=f"{compensation_factor:.4f}",
+                            delta=f"{(compensation_factor - 1.0)*100.0:+.1f}%",
+                            help="Correction multiplier based on ambient T and RH vs reference conditions"
+                        )
+                    with env_m3:
+                        st.metric(
+                            label="Corrected Intensity",
+                            value=f"{corrected_intensity:.4f}",
+                            delta=f"{(corrected_intensity - intensity):+.4f}",
+                            help="Normalized optical intensity after environmental compensation: Raw / CF"
+                        )
+                    with env_m4:
+                        st.metric(
+                            label="Estimated Dose",
+                            value=f"{estimated_dose_corrected:.2f} ppm*hr",
+                            delta=f"{(estimated_dose_corrected - predicted_dose):+.2f} ppm*hr",
+                            help="Dose calculated using corrected intensity via polynomial model"
+                        )
+
+                    st.caption(f"📋 **Compensation Analysis:** {env_comp_res['explanation']}")
 
                 except calibration.ReferenceScaleNotFoundError as e:
                     st.warning(
@@ -1334,12 +1447,28 @@ elif page == "Dashboard":
             lambda x: "❌ EXPIRED" if x == 1 else "✅ Valid"
         )
 
+        # Format environmental & intensity columns
+        if "temperature" not in df_display.columns:
+            df_display["temperature"] = 25.0
+        if "humidity" not in df_display.columns:
+            df_display["humidity"] = 50.0
+        if "compensation_factor" not in df_display.columns:
+            df_display["compensation_factor"] = 1.0
+        if "corrected_intensity" not in df_display.columns:
+            df_display["corrected_intensity"] = df_display["intensity"]
+        if "raw_intensity" not in df_display.columns:
+            df_display["raw_intensity"] = df_display["intensity"]
+
         display_cols = [
             "id",
             "worker_id",
             "timestamp",
             "dose",
             "intensity",
+            "temperature",
+            "humidity",
+            "compensation_factor",
+            "corrected_intensity",
             "risk_level",
             "Badge Validity",
             "expiry_status_message",
@@ -1350,7 +1479,11 @@ elif page == "Dashboard":
                 "worker_id": "Worker ID",
                 "timestamp": "Timestamp",
                 "dose": "Dose (ppm*hr)",
-                "intensity": "Staining Intensity",
+                "intensity": "Raw Intensity",
+                "temperature": "Temp (°C)",
+                "humidity": "RH (%)",
+                "compensation_factor": "Comp Factor",
+                "corrected_intensity": "Corrected Intensity",
                 "risk_level": "Risk Level",
                 "expiry_status_message": "Expiry Message",
             }

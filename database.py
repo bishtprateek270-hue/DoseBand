@@ -60,10 +60,29 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             dose REAL NOT NULL,
             risk_level TEXT NOT NULL,
             is_expired INTEGER NOT NULL,
-            expiry_status_message TEXT NOT NULL
+            expiry_status_message TEXT NOT NULL,
+            temperature REAL DEFAULT 25.0,
+            humidity REAL DEFAULT 50.0,
+            raw_intensity REAL DEFAULT 0.0,
+            corrected_intensity REAL DEFAULT 0.0,
+            compensation_factor REAL DEFAULT 1.0
         );
         """
     )
+
+    # Auto-migration for existing tables missing new environmental columns
+    cursor.execute("PRAGMA table_info(readings);")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+    env_cols = [
+        ("temperature", "REAL DEFAULT 25.0"),
+        ("humidity", "REAL DEFAULT 50.0"),
+        ("raw_intensity", "REAL DEFAULT 0.0"),
+        ("corrected_intensity", "REAL DEFAULT 0.0"),
+        ("compensation_factor", "REAL DEFAULT 1.0")
+    ]
+    for col_name, col_type in env_cols:
+        if col_name not in existing_cols:
+            cursor.execute(f"ALTER TABLE readings ADD COLUMN {col_name} {col_type};")
 
     # Table 2: worker profiles & dosimeter badge registration
     cursor.execute(
@@ -458,10 +477,15 @@ def insert_reading(
     risk_level: str,
     is_expired: Union[bool, int],
     expiry_status_message: str,
+    temperature: float = 25.0,
+    humidity: float = 50.0,
+    raw_intensity: Optional[float] = None,
+    corrected_intensity: Optional[float] = None,
+    compensation_factor: float = 1.0,
     db_path: str = DEFAULT_DB_PATH
 ) -> int:
     """
-    Inserts a new sensor reading log record into the database with ISO timestamp.
+    Inserts a new sensor reading log record into the database with ISO timestamp and environmental data.
 
     Args:
         worker_id (str): Unique worker identification code.
@@ -470,13 +494,17 @@ def insert_reading(
         risk_level (str): Safety risk classification.
         is_expired (bool | int): Badge expiry status flag (True/1 if expired).
         expiry_status_message (str): Human-readable badge validity message.
+        temperature (float): Ambient temperature in degrees Celsius (default: 25.0).
+        humidity (float): Ambient relative humidity in percent (default: 50.0).
+        raw_intensity (Optional[float]): Raw optical staining intensity.
+        corrected_intensity (Optional[float]): Temperature/humidity-compensated intensity.
+        compensation_factor (float): Environmental compensation multiplier.
         db_path (str): Database file path.
 
     Returns:
         int: The inserted record ID.
     """
-    if not os.path.exists(db_path):
-        init_db(db_path)
+    init_db(db_path)
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -484,11 +512,15 @@ def insert_reading(
     timestamp_str = datetime.now().isoformat()
     expired_flag = 1 if is_expired else 0
 
+    r_int = float(intensity) if raw_intensity is None else float(raw_intensity)
+    c_int = float(intensity) if corrected_intensity is None else float(corrected_intensity)
+
     cursor.execute(
         """
         INSERT INTO readings (
-            worker_id, timestamp, intensity, dose, risk_level, is_expired, expiry_status_message
-        ) VALUES (?, ?, ?, ?, ?, ?, ?);
+            worker_id, timestamp, intensity, dose, risk_level, is_expired, expiry_status_message,
+            temperature, humidity, raw_intensity, corrected_intensity, compensation_factor
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         (
             str(worker_id).strip(),
@@ -497,7 +529,12 @@ def insert_reading(
             float(dose),
             str(risk_level),
             expired_flag,
-            str(expiry_status_message)
+            str(expiry_status_message),
+            float(temperature),
+            float(humidity),
+            r_int,
+            c_int,
+            float(compensation_factor)
         )
     )
 
