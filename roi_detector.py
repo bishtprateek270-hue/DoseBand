@@ -150,6 +150,66 @@ def extract_center_features(
     }
 
 
+def extract_humidity_card_features(
+    image_bgr: np.ndarray,
+    box: Tuple[int, int, int, int]
+) -> Dict[str, float]:
+    """
+    Extracts RGB and HSV features specifically from the circular colored disc
+    of the humidity indicator card, excluding the card background and dark outer border.
+    Uses the exact same preprocessing (RGB mean, HSV via cv2.cvtColor) as during model training.
+    """
+    x1, y1, x2, y2 = box
+    crop_bgr = image_bgr[y1:y2, x1:x2]
+    
+    if crop_bgr.size == 0:
+        return {
+            "mean_r": 128.0, "mean_g": 128.0, "mean_b": 128.0,
+            "hue": 0.0, "sat": 0.0, "val": 128.0
+        }
+    
+    ch, cw = crop_bgr.shape[:2]
+    cx, cy = cw // 2, ch // 2
+    r_sample = max(5, int(min(ch, cw) // 2 - 10))
+    
+    yy, xx = np.ogrid[:ch, :cw]
+    dist = np.sqrt((xx - cx)**2 + (yy - cy)**2)
+    circle_mask = dist <= r_sample
+    
+    disc_pixels_bgr = crop_bgr[circle_mask]
+    
+    # Exclude white card background (>225 in all RGB channels) and black border (<40 in all channels)
+    valid_pixels = []
+    for px in disc_pixels_bgr:
+        b, g, r = float(px[0]), float(px[1]), float(px[2])
+        is_white = (r > 225 and g > 225 and b > 225 and max(abs(r - g), abs(g - b), abs(r - b)) < 18)
+        is_black = (r < 40 and g < 40 and b < 40)
+        if not is_white and not is_black:
+            valid_pixels.append(px)
+            
+    if len(valid_pixels) >= 12:
+        sampled_bgr = np.array(valid_pixels, dtype=np.uint8)
+    else:
+        # Fallback to inner core
+        core_mask = dist <= max(4, r_sample // 2)
+        sampled_bgr = crop_bgr[core_mask]
+        if sampled_bgr.size == 0:
+            sampled_bgr = crop_bgr
+            
+    clean_rgb = sampled_bgr[:, [2, 1, 0]]
+    rgb_reshaped = clean_rgb.reshape(-1, 1, 3)
+    hsv_reshaped = cv2.cvtColor(rgb_reshaped, cv2.COLOR_RGB2HSV)
+    
+    return {
+        "mean_r": float(np.mean(clean_rgb[:, 0])),
+        "mean_g": float(np.mean(clean_rgb[:, 1])),
+        "mean_b": float(np.mean(clean_rgb[:, 2])),
+        "hue": float(np.mean(hsv_reshaped[:, 0, 0])),
+        "sat": float(np.mean(hsv_reshaped[:, 0, 1])),
+        "val": float(np.mean(hsv_reshaped[:, 0, 2]))
+    }
+
+
 def draw_roi_visual_overlay(
     image_bgr: np.ndarray,
     detections: Dict[str, Any]

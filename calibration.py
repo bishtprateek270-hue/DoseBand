@@ -142,9 +142,11 @@ def detect_reference_scale(image: np.ndarray) -> List[Tuple[float, float, float]
         if segment.size == 0:
             raise ReferenceScaleNotFoundError("Reference scale segment extraction failed.")
 
-        # Compute mean color in BGR for the segment
-        mean_bgr = cv2.mean(segment)[:3]
-        detected_bgr_colors.append((float(mean_bgr[0]), float(mean_bgr[1]), float(mean_bgr[2])))
+        # Compute robust median color in BGR for the segment (rejects printed text labels & border noise)
+        med_b = float(np.median(segment[:, :, 0]))
+        med_g = float(np.median(segment[:, :, 1]))
+        med_r = float(np.median(segment[:, :, 2]))
+        detected_bgr_colors.append((med_b, med_g, med_r))
 
     if len(detected_bgr_colors) != 5:
         raise ReferenceScaleNotFoundError("Could not reliably extract 5 color swatch segments.")

@@ -21,7 +21,7 @@ import pandas as pd
 import cv2
 
 from calibration import calibrate_image, ReferenceScaleNotFoundError
-from roi_detector import detect_all_rois, extract_center_features, draw_roi_visual_overlay
+from roi_detector import detect_all_rois, extract_center_features, extract_humidity_card_features, draw_roi_visual_overlay
 from strip_validator import validate_test_strip, INVALID_IMAGE_MESSAGE, UNCERTAIN_IMAGE_MESSAGE
 
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
@@ -194,7 +194,7 @@ class DoseBandInferencePipeline:
         hum_box = roi_detections["humidity_indicator"]["box"]
 
         h2s_feats = extract_center_features(corrected_bgr, h2s_box, crop_fraction=0.60)
-        hum_feats = extract_center_features(corrected_bgr, hum_box, crop_fraction=0.60)
+        hum_feats = extract_humidity_card_features(corrected_bgr, hum_box)
 
         # 4. Predict Humidity via KNN or Manual Override
         if manual_humidity_override is not None:

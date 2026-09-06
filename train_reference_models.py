@@ -106,7 +106,7 @@ def train_h2s_random_forest(
 def train_humidity_knn(
     csv_path: str = HUMIDITY_CSV_PATH,
     model_output_path: str = HUMIDITY_MODEL_PATH,
-    n_neighbors: int = 3
+    n_neighbors: int = 1
 ) -> Tuple[KNeighborsRegressor, Dict[str, float]]:
     """
     Trains a KNeighborsRegressor mapping color features to relative humidity (%RH).
