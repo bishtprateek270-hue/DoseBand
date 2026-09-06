@@ -128,9 +128,16 @@ def extract_center_features(
     if center_bgr.size == 0:
         center_bgr = roi_bgr
 
-    center_rgb = cv2.cvtColor(center_bgr, cv2.COLOR_BGR2RGB)
-    center_hsv = cv2.cvtColor(center_bgr, cv2.COLOR_BGR2HSV)
-    center_gray = cv2.cvtColor(center_bgr, cv2.COLOR_BGR2GRAY)
+    # Multi-pixel spatial smoothing with median filtering to eliminate noise/glare
+    ch, cw = center_bgr.shape[:2]
+    if ch >= 5 and cw >= 5:
+        filtered_bgr = cv2.medianBlur(center_bgr, 3)
+    else:
+        filtered_bgr = center_bgr
+
+    center_rgb = cv2.cvtColor(filtered_bgr, cv2.COLOR_BGR2RGB)
+    center_hsv = cv2.cvtColor(filtered_bgr, cv2.COLOR_BGR2HSV)
+    center_gray = cv2.cvtColor(filtered_bgr, cv2.COLOR_BGR2GRAY)
 
     return {
         "mean_r": float(np.mean(center_rgb[:, :, 0])),

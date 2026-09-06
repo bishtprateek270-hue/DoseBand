@@ -807,33 +807,38 @@ elif page == "Scan Strip":
                         st.metric(
                             "Estimated H₂S Gas",
                             f"{inf_res['estimated_h2s_ppm']:.2f} ppm",
-                            help="Predicted by RandomForestRegressor using extracted color features + temperature + humidity + exposure time"
+                            help="Predicted by trained reference model using corrected strip RGB/HSV/intensity + temperature + humidity + exposure time"
                         )
                     with m_col2:
                         st.metric(
                             "Relative Humidity",
                             f"{inf_res['predicted_humidity']:.1f}% RH",
-                            help=f"Source: {inf_res['humidity_source']}"
+                            help=f"Source: {inf_res['humidity_source']} (Clamped: 20–90% RH)"
                         )
                     with m_col3:
                         st.metric(
                             "Cumulative Exposure",
-                            f"{inf_res['cumulative_dose_ppm_h']:.2f} ppm*hr",
-                            delta=f"Total: {cumulative_dose:.2f} ppm*hr",
-                            help="Shift dose (ppm * hours) and total worker cumulative exposure"
+                            f"{inf_res['cumulative_dose_ppm_h']:.2f} ppm·h",
+                            delta=f"Total: {cumulative_dose:.2f} ppm·h",
+                            help="Shift dose (estimated ppm × hours) and total worker cumulative exposure"
                         )
                     with m_col4:
+                        rel_label = inf_res.get("reliability_label", "High Reliability")
+                        conf_val = inf_res.get("confidence_pct", 95)
                         st.metric(
-                            "Staining Intensity",
-                            f"{inf_res['staining_intensity']:.4f}",
-                            help="Normalized surface reflectance darkening score (0.0 to 1.0)"
+                            "Prediction Reliability",
+                            f"{conf_val}%",
+                            delta=rel_label,
+                            delta_color="normal" if conf_val >= 80 else "inverse",
+                            help="Composite score: Test-strip validation + multi-ROI detection + lighting calibration"
                         )
 
-                    # Environmental Context Line
+                    # Environmental & Reliability Context Line
                     st.caption(
                         f"🌡️ **Ambient Temperature (Manual / Demo):** `{ambient_temp:.1f} °C` &nbsp;|&nbsp; "
                         f"⏱️ **Shift Duration:** `{exposure_time:.1f} hrs` &nbsp;|&nbsp; "
-                        f"💧 **Humidity Mode:** `{inf_res['humidity_source']}`"
+                        f"💧 **Humidity Source:** `{inf_res['humidity_source']}` &nbsp;|&nbsp; "
+                        f"🛡️ **Scan Confidence:** `{inf_res.get('reliability_label', 'High Reliability')} ({inf_res.get('confidence_pct', 95)}%)`"
                     )
 
                     # Risk Level Banner (Evaluated only after valid prediction)

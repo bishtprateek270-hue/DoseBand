@@ -62,6 +62,7 @@ class DoseBandInferencePipeline:
     def predict_humidity(self, hum_features: Dict[str, float]) -> float:
         """
         Estimates relative humidity (%RH) from optical color features using the KNN model.
+        Clamped to supported simulated calibration range (20.0 to 90.0 %RH).
         """
         if self.humidity_payload is None:
             self._load_models()
@@ -71,8 +72,8 @@ class DoseBandInferencePipeline:
         
         input_df = pd.DataFrame([{f: hum_features.get(f, 0.0) for f in feat_names}])
         pred_rh = float(knn_model.predict(input_df)[0])
-        # Bound humidity between physical limits
-        return float(np.clip(pred_rh, 10.0, 100.0))
+        # Bound humidity between supported simulated calibration limits (20 to 90% RH)
+        return float(np.clip(pred_rh, 20.0, 90.0))
 
     def predict_h2s_ppm(
         self,
@@ -82,12 +83,13 @@ class DoseBandInferencePipeline:
         exposure_time_h: float = 1.0
     ) -> float:
         """
-        Estimates H2S gas concentration (ppm) using the RandomForestRegressor model.
+        Estimates H2S gas concentration (ppm) using the trained reference model.
+        Clamped to supported simulated calibration range (0.0 to 400.0 ppm).
         """
         if self.h2s_payload is None:
             self._load_models()
 
-        rf_model = self.h2s_payload["model"]
+        model = self.h2s_payload["model"]
         feat_names = self.h2s_payload["features"]
 
         feature_dict = dict(h2s_features)
@@ -96,8 +98,9 @@ class DoseBandInferencePipeline:
         feature_dict["exposure_time_h"] = float(exposure_time_h)
 
         input_df = pd.DataFrame([{f: feature_dict.get(f, 0.0) for f in feat_names}])
-        pred_ppm = float(rf_model.predict(input_df)[0])
-        return float(max(0.0, pred_ppm))
+        pred_ppm = float(model.predict(input_df)[0])
+        # Bound H2S ppm strictly to supported simulated range (0 to 400 ppm)
+        return float(np.clip(pred_ppm, 0.0, 400.0))
 
     def classify_risk(self, h2s_ppm: float, exposure_time_h: float = 1.0) -> Tuple[str, str, str]:
         """
@@ -148,6 +151,7 @@ class DoseBandInferencePipeline:
                 "validation_status": val_res["status"],
                 "validation_score": val_res["validation_score"],
                 "confidence_pct": val_res["confidence_pct"],
+                "reliability_label": "Invalid / Unsupported Image",
                 "user_message": val_res["user_message"],
                 "rejection_reasons": val_res["rejection_reasons"],
                 "roi_detections": roi_detections,
@@ -176,6 +180,7 @@ class DoseBandInferencePipeline:
                 "validation_status": "Invalid",
                 "validation_score": val_res.get("validation_score", 0.0),
                 "confidence_pct": 0,
+                "reliability_label": "Invalid / Retake Required",
                 "user_message": "Required DoseBand sensor strip or reference ROIs could not be reliably detected in the image.",
                 "rejection_reasons": ["Required sensor regions (H2S strip or reference scale) missing, occluded, or out of frame."],
                 "roi_detections": roi_detections,
@@ -184,22 +189,22 @@ class DoseBandInferencePipeline:
                 "disclaimer": PROTOTYPE_DISCLAIMER
             }
 
-        # 3. Feature Extraction from Central ROIs
+        # 3. Feature Extraction from Central ROIs (with multi-pixel center sampling & median filtering)
         h2s_box = roi_detections["h2s_strip"]["box"]
         hum_box = roi_detections["humidity_indicator"]["box"]
 
         h2s_feats = extract_center_features(corrected_bgr, h2s_box, crop_fraction=0.60)
         hum_feats = extract_center_features(corrected_bgr, hum_box, crop_fraction=0.60)
 
-        # 4. Predict Humidity via KNN
+        # 4. Predict Humidity via KNN or Manual Override
         if manual_humidity_override is not None:
-            predicted_rh = float(manual_humidity_override)
-            humidity_source = "MANUAL_OVERRIDE"
+            predicted_rh = float(np.clip(manual_humidity_override, 20.0, 90.0))
+            humidity_source = "MANUAL_INPUT"
         else:
             predicted_rh = self.predict_humidity(hum_feats)
             humidity_source = "OPTICAL_KNN_MODEL"
 
-        # 5. Predict H2S ppm via Random Forest
+        # 5. Predict H2S ppm via Reference Model
         estimated_h2s_ppm = self.predict_h2s_ppm(
             h2s_features=h2s_feats,
             temperature_c=temperature_c,
@@ -215,9 +220,24 @@ class DoseBandInferencePipeline:
         raw_val = h2s_feats["val"]
         staining_intensity = round(float(np.clip((240.0 - raw_val) / 190.0, 0.0, 1.0)), 4)
 
+        # Overall confidence & reliability rating
+        val_score = val_res.get("validation_score", 0.90)
+        roi_conf = roi_detections.get("overall_confidence", 0.90)
+        composite_conf = float(0.50 * val_score + 0.35 * roi_conf + (0.15 if calib_success else 0.0))
+        conf_pct = int(round(composite_conf * 100))
+
+        if conf_pct >= 80:
+            reliability_label = "High Reliability"
+        elif conf_pct >= 65:
+            reliability_label = "Moderate (Retake Recommended)"
+        else:
+            reliability_label = "Low Confidence (Retake Required)"
+
         return {
             "is_valid": True,
-            "overall_confidence": roi_detections["overall_confidence"],
+            "overall_confidence": round(composite_conf, 3),
+            "confidence_pct": conf_pct,
+            "reliability_label": reliability_label,
             "roi_detections": roi_detections,
             "annotated_overlay": annotated_overlay,
             "lighting_meta": calib_meta,

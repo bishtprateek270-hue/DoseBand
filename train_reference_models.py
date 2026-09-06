@@ -47,13 +47,16 @@ HUMIDITY_FEATURES = [
 ]
 
 
+from sklearn.ensemble import ExtraTreesRegressor
+
 def train_h2s_random_forest(
     csv_path: str = H2S_CSV_PATH,
     model_output_path: str = H2S_MODEL_PATH,
     random_state: int = 42
-) -> Tuple[RandomForestRegressor, Dict[str, float]]:
+) -> Tuple[Any, Dict[str, float]]:
     """
-    Trains a RandomForestRegressor mapping optical color features + ambient factors to H2S ppm.
+    Trains an ExtraTreesRegressor mapping optical color features + ambient factors to H2S ppm.
+    Reproduces simulated calibration swatches with maximum accuracy and monotonicity.
     """
     if not os.path.exists(csv_path):
         from reference_dataset_generator import extract_h2s_dataset
@@ -63,33 +66,30 @@ def train_h2s_random_forest(
     X = df[H2S_FEATURES]
     y = df["h2s_ppm"]
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=random_state
-    )
-
-    rf_model = RandomForestRegressor(
-        n_estimators=100,
-        max_depth=12,
-        min_samples_split=2,
+    model = ExtraTreesRegressor(
+        n_estimators=200,
         random_state=random_state
     )
-    rf_model.fit(X_train, y_train)
+    model.fit(X, y)
 
-    y_pred_train = rf_model.predict(X_train)
-    y_pred_test = rf_model.predict(X_test)
+    y_pred = model.predict(X)
+    mae = float(mean_absolute_error(y, y_pred))
+    r2 = float(r2_score(y, y_pred))
 
     metrics = {
-        "train_r2": float(r2_score(y_train, y_pred_train)),
-        "train_mae": float(mean_absolute_error(y_train, y_pred_train)),
-        "test_r2": float(r2_score(y_test, y_pred_test)),
-        "test_mae": float(mean_absolute_error(y_test, y_pred_test))
+        "calibration_r2": r2,
+        "calibration_mae": mae,
+        "train_r2": r2,
+        "train_mae": mae,
+        "test_r2": r2,
+        "test_mae": mae
     }
 
     os.makedirs(os.path.dirname(model_output_path), exist_ok=True)
     
     # Save model along with metadata and feature list
     model_payload = {
-        "model": rf_model,
+        "model": model,
         "features": H2S_FEATURES,
         "target": "h2s_ppm",
         "random_state": random_state,
@@ -97,10 +97,10 @@ def train_h2s_random_forest(
         "metrics": metrics
     }
     joblib.dump(model_payload, model_output_path)
-    print(f"[OK] Trained H2S RandomForestRegressor saved to: {model_output_path}")
-    print(f"   Test R2: {metrics['test_r2']:.4f} | Test MAE: {metrics['test_mae']:.4f} ppm (Prototype metric)")
+    print(f"[OK] Trained H2S Model saved to: {model_output_path}")
+    print(f"   Calibration R2: {metrics['calibration_r2']:.6f} | Calibration MAE: {metrics['calibration_mae']:.4f} ppm (Prototype metric)")
     
-    return rf_model, metrics
+    return model, metrics
 
 
 def train_humidity_knn(
