@@ -5,7 +5,7 @@ Designed to mirror DGMS (Directorate General of Mines Safety) and OISD (Oil Indu
 occupational health reporting standards for real-time hazardous gas monitoring.
 """
 
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import os
 import re
 import sys
@@ -162,7 +162,7 @@ st.sidebar.markdown("## 🛡️ **DoseBand**")
 st.sidebar.caption("Industrial Safety Engineering Platform")
 st.sidebar.divider()
 
-page = st.sidebar.radio("Navigation Menu", ["Home", "Scan Strip", "Dashboard"])
+page = st.sidebar.radio("Navigation Menu", ["Home", "Scan Strip", "Workers", "Dashboard"])
 
 st.sidebar.divider()
 st.sidebar.markdown(
@@ -232,7 +232,7 @@ if page == "Home":
 elif page == "Scan Strip":
     st.title("📸 Scan Sensor Strip")
     st.caption(
-        "Enter worker details and provide a photo of the exposure wristband"
+        "Select a registered worker and provide a photo of the exposure wristband"
         " alongside the reference color scale."
     )
 
@@ -240,21 +240,67 @@ elif page == "Scan Strip":
 
     with col1:
         st.subheader("Step 1: Worker Identification")
-        worker_id_input = st.text_input(
-            "Worker ID*", placeholder="Enter Worker ID (e.g., W-102)"
-        )
+        
+        # Query registered workers from SQLite database
+        df_registered_workers = database.get_all_workers()
 
-        worker_id_clean = worker_id_input.strip()
-        is_worker_id_valid = False
+        if not df_registered_workers.empty:
+            worker_options = [
+                f"{row['worker_id']} — {row['name']} ({row['department']} | {row['work_zone']})"
+                for _, row in df_registered_workers.iterrows()
+            ]
+            selected_worker_str = st.selectbox(
+                "Select Registered Worker*",
+                options=worker_options,
+                help="Select worker by ID, Name, Department, or Work Zone"
+            )
+            worker_id_clean = selected_worker_str.split(" — ")[0].strip()
+            is_worker_id_valid = True
 
-        if worker_id_clean:
-            if re.match(r"^[a-zA-Z0-9_-]{3,10}$", worker_id_clean):
-                is_worker_id_valid = True
-                st.caption("✅ Valid Worker ID format.")
-            else:
-                st.error("⚠️ Worker ID must be 3-10 alphanumeric characters (e.g., W-102, W102).")
+            # Display rich worker profile metadata card
+            worker_info = database.get_worker_by_id(worker_id_clean)
+            if worker_info:
+                # Check badge expiry status
+                try:
+                    exp_date = datetime.strptime(worker_info["badge_expiry_date"], "%Y-%m-%d").date()
+                    is_badge_date_expired = exp_date < date.today()
+                    days_left = (exp_date - date.today()).days
+                except Exception:
+                    is_badge_date_expired = False
+                    days_left = 999
+
+                status_badge_color = "#10B981" if (worker_info["status"] == "Active" and not is_badge_date_expired) else "#EF4444"
+                status_label = worker_info["status"]
+                if is_badge_date_expired:
+                    status_label = "Badge Expired"
+
+                st.markdown(
+                    f"""
+                    <div style="background-color: #1E293B; border-left: 4px solid {status_badge_color}; padding: 0.85rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong style="color: #F8FAFC; font-size: 0.95rem;">👤 {worker_info['name']} ({worker_info['worker_id']})</strong>
+                            <span style="background-color: {'rgba(16, 185, 129, 0.2)' if not is_badge_date_expired and worker_info['status'] == 'Active' else 'rgba(239, 68, 68, 0.2)'}; color: {status_badge_color}; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                                {status_label.upper()}
+                            </span>
+                        </div>
+                        <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 0.4rem; line-height: 1.4;">
+                            🏭 <b>Dept:</b> {worker_info['department']} &nbsp;|&nbsp; 📍 <b>Zone:</b> {worker_info['work_zone']}<br>
+                            ⏰ <b>Shift:</b> {worker_info['shift']}<br>
+                            🏷️ <b>Badge ID:</b> <code style="color: #F97316;">{worker_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b>Expiry:</b> {worker_info['badge_expiry_date']}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                if is_badge_date_expired:
+                    st.warning(f"⚠️ Dosimeter Badge `{worker_info['badge_id']}` expired on {worker_info['badge_expiry_date']}. Immediate replacement recommended.")
+                elif days_left <= 7:
+                    st.caption(f"⏳ Badge `{worker_info['badge_id']}` expires soon ({days_left} days remaining).")
         else:
-            st.caption("ℹ️ Worker ID is required to enable scan analysis.")
+            st.warning("⚠️ No registered workers found in database. Please register workers on the **Workers** page.")
+            worker_id_clean = ""
+            is_worker_id_valid = False
 
         st.subheader("Step 2: Provide Image")
 
@@ -478,10 +524,464 @@ elif page == "Scan Strip":
                     )
                 except Exception as e:
                     print(f"[ERROR] Scan Analysis Failed: {e}", file=sys.stderr)
-                    st.error(f"Something went wrong analyzing this scan ({e}) — please try again or contact support.")
+# -----------------------------------------------------------------------------
+# PAGE 3: WORKERS
+# -----------------------------------------------------------------------------
+elif page == "Workers":
+    st.markdown("<span class='brand-badge'>PERSONNEL & DOSIMETRY LOGISTICS</span>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-header'>👷 Worker & Badge Management</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<p class='sub-header'>Safety Officer Console — Register, track, update, and manage plant personnel, work zones, shifts, and optical dosimeter badges.</p>",
+        unsafe_allow_html=True,
+    )
+
+    df_workers = database.get_all_workers()
+
+    # Calculate real-time KPI metrics
+    total_workers = len(df_workers)
+    active_workers = len(df_workers[df_workers["status"] == "Active"]) if not df_workers.empty else 0
+    
+    # Calculate badges expired or expiring in <= 7 days
+    expired_badges_count = 0
+    expiring_soon_count = 0
+    today_date = date.today()
+    if not df_workers.empty:
+        for _, w in df_workers.iterrows():
+            try:
+                exp_d = datetime.strptime(w["badge_expiry_date"], "%Y-%m-%d").date()
+                if exp_d < today_date or w["status"] != "Active":
+                    expired_badges_count += 1
+                elif (exp_d - today_date).days <= 7:
+                    expiring_soon_count += 1
+            except Exception:
+                pass
+
+    total_zones = df_workers["work_zone"].nunique() if not df_workers.empty else 0
+
+    # Metric Cards row
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+    with kpi_col1:
+        st.metric("Total Registered Workers", total_workers)
+    with kpi_col2:
+        st.metric("Active Personnel", active_workers)
+    with kpi_col3:
+        st.metric("Expired / Expiring Badges", f"{expired_badges_count + expiring_soon_count}")
+    with kpi_col4:
+        st.metric("Monitored Work Zones", total_zones)
+
+    st.divider()
+
+    # Worker Management Tabs
+    tab_dir, tab_add, tab_edit, tab_del = st.tabs([
+        "📋 Worker Directory",
+        "➕ Register Worker",
+        "✏️ Edit Worker",
+        "🗑️ Delete Worker"
+    ])
+
+    # -------------------------------------------------------------------------
+    # TAB 1: WORKER DIRECTORY
+    # -------------------------------------------------------------------------
+    with tab_dir:
+        if df_workers.empty:
+            st.info("ℹ️ No workers currently registered. Use the **'Register Worker'** tab to add personnel.")
+        else:
+            # Filter bar
+            f_col1, f_col2, f_col3, f_col4 = st.columns([2, 1, 1, 1])
+            with f_col1:
+                search_query = st.text_input("🔍 Search Personnel", placeholder="Filter by Name, Worker ID, or Badge ID...").strip().lower()
+            with f_col2:
+                dept_options = ["All Departments"] + sorted(df_workers["department"].unique().tolist())
+                selected_dept = st.selectbox("Department", options=dept_options)
+            with f_col3:
+                zone_options = ["All Work Zones"] + sorted(df_workers["work_zone"].unique().tolist())
+                selected_zone = st.selectbox("Work Zone", options=zone_options)
+            with f_col4:
+                status_options = ["All Statuses"] + sorted(df_workers["status"].unique().tolist())
+                selected_status = st.selectbox("Status", options=status_options)
+
+            # Apply filters
+            df_filtered = df_workers.copy()
+            if search_query:
+                df_filtered = df_filtered[
+                    df_filtered["worker_id"].str.lower().str.contains(search_query, na=False) |
+                    df_filtered["name"].str.lower().str.contains(search_query, na=False) |
+                    df_filtered["badge_id"].str.lower().str.contains(search_query, na=False)
+                ]
+            if selected_dept != "All Departments":
+                df_filtered = df_filtered[df_filtered["department"] == selected_dept]
+            if selected_zone != "All Work Zones":
+                df_filtered = df_filtered[df_filtered["work_zone"] == selected_zone]
+            if selected_status != "All Statuses":
+                df_filtered = df_filtered[df_filtered["status"] == selected_status]
+
+            # Add Badge Validity Flag & Cumulative Dose column
+            def compute_badge_status(row):
+                try:
+                    exp_d = datetime.strptime(row["badge_expiry_date"], "%Y-%m-%d").date()
+                    if row["status"] != "Active":
+                        return "⏸️ Inactive"
+                    if exp_d < today_date:
+                        return "❌ EXPIRED"
+                    if (exp_d - today_date).days <= 7:
+                        return f"⏳ Expiring ({(exp_d - today_date).days}d)"
+                    return "✅ Active"
+                except Exception:
+                    return row["status"]
+
+            df_filtered["Badge Health"] = df_filtered.apply(compute_badge_status, axis=1)
+            df_filtered["Cumulative H₂S (ppm*hr)"] = df_filtered["worker_id"].apply(
+                lambda wid: f"{database.get_cumulative_dose(wid):.2f}"
+            )
+
+            st.caption(f"Showing **{len(df_filtered)}** of **{len(df_workers)}** registered workers.")
+
+            display_cols = [
+                "worker_id",
+                "name",
+                "department",
+                "work_zone",
+                "shift",
+                "badge_id",
+                "badge_issue_date",
+                "badge_expiry_date",
+                "Badge Health",
+                "Cumulative H₂S (ppm*hr)"
+            ]
+            
+            st.dataframe(
+                df_filtered[display_cols].rename(
+                    columns={
+                        "worker_id": "Worker ID",
+                        "name": "Full Name",
+                        "department": "Department",
+                        "work_zone": "Work Zone",
+                        "shift": "Shift",
+                        "badge_id": "Badge ID",
+                        "badge_issue_date": "Issue Date",
+                        "badge_expiry_date": "Expiry Date",
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # Worker Detail Dossier Card
+            st.markdown("#### 🔍 Worker Safety Dossier")
+            worker_ids_list = df_filtered["worker_id"].tolist()
+            if worker_ids_list:
+                sel_inspect_id = st.selectbox(
+                    "Inspect Worker Details",
+                    options=worker_ids_list,
+                    format_func=lambda wid: f"{wid} — {df_workers[df_workers['worker_id'] == wid]['name'].values[0]}"
+                )
+                w_profile = database.get_worker_by_id(sel_inspect_id)
+                w_cum_dose = database.get_cumulative_dose(sel_inspect_id)
+                w_readings = database.get_readings_for_worker(sel_inspect_id)
+
+                dossier_c1, dossier_c2 = st.columns([1, 1], gap="large")
+                with dossier_c1:
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #1E293B; border-radius: 0.75rem; padding: 1.25rem; border: 1px solid #334155;">
+                            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem;">
+                                <div style="background: #0F172A; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; border: 2px solid #F97316;">
+                                    👷
+                                </div>
+                                <div>
+                                    <h3 style="margin: 0; color: #F8FAFC; font-size: 1.25rem;">{w_profile['name']}</h3>
+                                    <span style="color: #F97316; font-weight: 700; font-size: 0.85rem;">{w_profile['worker_id']}</span> &nbsp;|&nbsp; 
+                                    <span style="color: #94A3B8; font-size: 0.85rem;">{w_profile['status']}</span>
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.85rem; color: #CBD5E1; margin-top: 1rem;">
+                                <div><b>Department:</b><br><span style="color: #F8FAFC;">{w_profile['department']}</span></div>
+                                <div><b>Work Zone:</b><br><span style="color: #F8FAFC;">{w_profile['work_zone']}</span></div>
+                                <div><b>Assigned Shift:</b><br><span style="color: #F8FAFC;">{w_profile['shift']}</span></div>
+                                <div><b>Dosimeter Badge ID:</b><br><code style="color: #F97316;">{w_profile['badge_id']}</code></div>
+                                <div><b>Badge Issue Date:</b><br><span style="color: #F8FAFC;">{w_profile['badge_issue_date']}</span></div>
+                                <div><b>Badge Expiry Date:</b><br><span style="color: #F8FAFC;">{w_profile['badge_expiry_date']}</span></div>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                with dossier_c2:
+                    st.markdown("##### ⚡ Exposure & Dosimeter Health")
+                    st.metric(
+                        "Total Cumulative H₂S Dose",
+                        f"{w_cum_dose:.2f} ppm*hr",
+                        delta=f"{UNSAFE_CUMULATIVE_THRESHOLD - w_cum_dose:.2f} ppm*hr remaining" if w_cum_dose < UNSAFE_CUMULATIVE_THRESHOLD else "EXCEEDED LIMIT",
+                        delta_color="normal" if w_cum_dose < UNSAFE_CUMULATIVE_THRESHOLD else "inverse"
+                    )
+                    
+                    # Exposure threshold progress bar
+                    progress_val = min(1.0, max(0.0, w_cum_dose / UNSAFE_CUMULATIVE_THRESHOLD))
+                    st.progress(progress_val, text=f"OSHA/DGMS Cumulative Limit ({w_cum_dose:.1f} / {UNSAFE_CUMULATIVE_THRESHOLD:.1f} ppm*hr)")
+
+                    st.caption(f"Total Dosimeter Scans Logged: **{len(w_readings)}** records.")
+
+            # CSV Download
+            csv_workers = df_filtered.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Worker Registry CSV",
+                data=csv_workers,
+                file_name=f"doseband_workers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                type="primary"
+            )
+
+    # -------------------------------------------------------------------------
+    # TAB 2: REGISTER NEW WORKER
+    # -------------------------------------------------------------------------
+    with tab_add:
+        st.subheader("➕ Register New Plant Personnel & Assign Dosimeter Badge")
+        st.caption("All fields are mandatory. Worker ID and Badge ID must be globally unique.")
+
+        with st.form("register_worker_form", clear_on_submit=False):
+            form_c1, form_c2 = st.columns(2, gap="medium")
+            
+            with form_c1:
+                new_worker_id = st.text_input("Worker ID*", placeholder="e.g., W-106").strip()
+                new_name = st.text_input("Full Name*", placeholder="e.g., Kavita Sharma").strip()
+                
+                dept_choices = [
+                    "Refinery Operations",
+                    "Pipeline Maintenance",
+                    "Safety & Inspection",
+                    "Chemical Laboratory",
+                    "Drilling & Extraction",
+                    "Storage & Flare Area",
+                    "Utilities & Power Plant",
+                    "Quality Assurance & Control"
+                ]
+                new_dept = st.selectbox("Department*", options=dept_choices)
+                
+                zone_choices = [
+                    "Zone A - Crude Distillation Unit",
+                    "Zone B - Desulfurization Plant",
+                    "Zone C - Storage & Flare Area",
+                    "Zone D - Quality Control Lab",
+                    "Zone E - Wellhead Platform",
+                    "Zone F - Effluent Treatment Unit",
+                    "Zone G - Gas Compressor Station"
+                ]
+                new_zone = st.selectbox("Work Zone / Unit*", options=zone_choices)
+
+            with form_c2:
+                shift_choices = [
+                    "Shift 1 (06:00 - 14:00)",
+                    "Shift 2 (14:00 - 22:00)",
+                    "Shift 3 (22:00 - 06:00)",
+                    "General Shift (09:00 - 17:00)"
+                ]
+                new_shift = st.selectbox("Shift Assignment*", options=shift_choices)
+                new_status = st.selectbox("Worker Status*", options=["Active", "Inactive", "On Leave"])
+                
+                new_badge_id = st.text_input("Dosimeter Badge ID*", placeholder="e.g., BDG-106").strip()
+                
+                date_c1, date_c2 = st.columns(2)
+                with date_c1:
+                    new_issue_date = st.date_input("Badge Issue Date*", value=date.today())
+                with date_c2:
+                    new_expiry_date = st.date_input("Badge Expiry Date*", value=date.today() + timedelta(days=60))
+
+            submit_reg = st.form_submit_button("🛡️ Register Worker & Issue Badge", type="primary", use_container_width=True)
+
+            if submit_reg:
+                # Validation checks
+                if not new_worker_id or not new_name or not new_badge_id:
+                    st.error("⚠️ Worker ID, Full Name, and Badge ID are mandatory fields.")
+                elif not re.match(r"^[a-zA-Z0-9_-]{3,15}$", new_worker_id):
+                    st.error("⚠️ Worker ID must be 3-15 alphanumeric characters (e.g., W-106).")
+                elif not re.match(r"^[a-zA-Z0-9_-]{3,15}$", new_badge_id):
+                    st.error("⚠️ Badge ID must be 3-15 alphanumeric characters (e.g., BDG-106).")
+                elif new_expiry_date < new_issue_date:
+                    st.error("⚠️ Badge Expiry Date cannot be earlier than Badge Issue Date.")
+                else:
+                    # Check if worker_id already exists
+                    existing_worker = database.get_worker_by_id(new_worker_id)
+                    existing_badge = database.get_worker_by_badge_id(new_badge_id)
+
+                    if existing_worker:
+                        st.error(f"❌ Worker ID `{new_worker_id}` is already registered for worker **{existing_worker['name']}**.")
+                    elif existing_badge:
+                        st.error(f"❌ Badge ID `{new_badge_id}` is already assigned to worker **{existing_badge['name']}** (`{existing_badge['worker_id']}`).")
+                    else:
+                        try:
+                            database.insert_worker(
+                                worker_id=new_worker_id,
+                                name=new_name,
+                                department=new_dept,
+                                work_zone=new_zone,
+                                shift=new_shift,
+                                badge_id=new_badge_id,
+                                badge_issue_date=new_issue_date.isoformat(),
+                                badge_expiry_date=new_expiry_date.isoformat(),
+                                status=new_status
+                            )
+                            st.success(f"✅ Worker **{new_name}** (`{new_worker_id}`) registered successfully with Badge `{new_badge_id}`!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to register worker: {e}")
+
+    # -------------------------------------------------------------------------
+    # TAB 3: EDIT WORKER
+    # -------------------------------------------------------------------------
+    with tab_edit:
+        st.subheader("✏️ Edit Registered Worker Profile")
+        if df_workers.empty:
+            st.info("ℹ️ No registered workers available to edit.")
+        else:
+            worker_edit_list = df_workers["worker_id"].tolist()
+            edit_worker_id = st.selectbox(
+                "Select Worker to Edit",
+                options=worker_edit_list,
+                format_func=lambda wid: f"{wid} — {df_workers[df_workers['worker_id'] == wid]['name'].values[0]} ({df_workers[df_workers['worker_id'] == wid]['department'].values[0]})"
+            )
+
+            curr_worker = database.get_worker_by_id(edit_worker_id)
+            if curr_worker:
+                with st.form("edit_worker_form"):
+                    e_col1, e_col2 = st.columns(2, gap="medium")
+                    
+                    with e_col1:
+                        st.text_input("Worker ID (Immutable)", value=curr_worker["worker_id"], disabled=True)
+                        edit_name = st.text_input("Full Name*", value=curr_worker["name"]).strip()
+                        
+                        dept_options = [
+                            "Refinery Operations",
+                            "Pipeline Maintenance",
+                            "Safety & Inspection",
+                            "Chemical Laboratory",
+                            "Drilling & Extraction",
+                            "Storage & Flare Area",
+                            "Utilities & Power Plant",
+                            "Quality Assurance & Control"
+                        ]
+                        curr_dept = curr_worker["department"]
+                        dept_idx = dept_options.index(curr_dept) if curr_dept in dept_options else 0
+                        edit_dept = st.selectbox("Department*", options=dept_options, index=dept_idx)
+                        
+                        zone_options = [
+                            "Zone A - Crude Distillation Unit",
+                            "Zone B - Desulfurization Plant",
+                            "Zone C - Storage & Flare Area",
+                            "Zone D - Quality Control Lab",
+                            "Zone E - Wellhead Platform",
+                            "Zone F - Effluent Treatment Unit",
+                            "Zone G - Gas Compressor Station"
+                        ]
+                        curr_zone = curr_worker["work_zone"]
+                        zone_idx = zone_options.index(curr_zone) if curr_zone in zone_options else 0
+                        edit_zone = st.selectbox("Work Zone*", options=zone_options, index=zone_idx)
+
+                    with e_col2:
+                        shift_options = [
+                            "Shift 1 (06:00 - 14:00)",
+                            "Shift 2 (14:00 - 22:00)",
+                            "Shift 3 (22:00 - 06:00)",
+                            "General Shift (09:00 - 17:00)"
+                        ]
+                        curr_shift = curr_worker["shift"]
+                        shift_idx = shift_options.index(curr_shift) if curr_shift in shift_options else 0
+                        edit_shift = st.selectbox("Shift Assignment*", options=shift_options, index=shift_idx)
+                        
+                        status_options = ["Active", "Inactive", "On Leave"]
+                        curr_status = curr_worker["status"]
+                        status_idx = status_options.index(curr_status) if curr_status in status_options else 0
+                        edit_status = st.selectbox("Status*", options=status_options, index=status_idx)
+                        
+                        edit_badge_id = st.text_input("Badge ID*", value=curr_worker["badge_id"]).strip()
+                        
+                        try:
+                            init_issue = datetime.strptime(curr_worker["badge_issue_date"], "%Y-%m-%d").date()
+                        except Exception:
+                            init_issue = date.today()
+                            
+                        try:
+                            init_expiry = datetime.strptime(curr_worker["badge_expiry_date"], "%Y-%m-%d").date()
+                        except Exception:
+                            init_expiry = date.today() + timedelta(days=60)
+
+                        e_date1, e_date2 = st.columns(2)
+                        with e_date1:
+                            edit_issue_date = st.date_input("Badge Issue Date*", value=init_issue)
+                        with e_date2:
+                            edit_expiry_date = st.date_input("Badge Expiry Date*", value=init_expiry)
+
+                    submit_edit = st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True)
+
+                    if submit_edit:
+                        if not edit_name or not edit_badge_id:
+                            st.error("⚠️ Full Name and Badge ID cannot be empty.")
+                        elif edit_expiry_date < edit_issue_date:
+                            st.error("⚠️ Badge Expiry Date cannot be earlier than Badge Issue Date.")
+                        else:
+                            # Check if badge_id belongs to another worker
+                            badge_owner = database.get_worker_by_badge_id(edit_badge_id)
+                            if badge_owner and badge_owner["worker_id"] != edit_worker_id:
+                                st.error(f"❌ Badge ID `{edit_badge_id}` is already assigned to worker **{badge_owner['name']}** (`{badge_owner['worker_id']}`).")
+                            else:
+                                try:
+                                    database.update_worker(
+                                        worker_id=edit_worker_id,
+                                        name=edit_name,
+                                        department=edit_dept,
+                                        work_zone=edit_zone,
+                                        shift=edit_shift,
+                                        badge_id=edit_badge_id,
+                                        badge_issue_date=edit_issue_date.isoformat(),
+                                        badge_expiry_date=edit_expiry_date.isoformat(),
+                                        status=edit_status
+                                    )
+                                    st.success(f"✅ Worker profile for **{edit_name}** (`{edit_worker_id}`) updated successfully!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Failed to update worker: {e}")
+
+    # -------------------------------------------------------------------------
+    # TAB 4: DELETE WORKER
+    # -------------------------------------------------------------------------
+    with tab_del:
+        st.subheader("🗑️ Remove Registered Worker")
+        if df_workers.empty:
+            st.info("ℹ️ No registered workers available to delete.")
+        else:
+            del_worker_list = df_workers["worker_id"].tolist()
+            del_worker_id = st.selectbox(
+                "Select Worker to Delete",
+                options=del_worker_list,
+                format_func=lambda wid: f"{wid} — {df_workers[df_workers['worker_id'] == wid]['name'].values[0]} ({df_workers[df_workers['worker_id'] == wid]['department'].values[0]})"
+            )
+
+            worker_to_del = database.get_worker_by_id(del_worker_id)
+            if worker_to_del:
+                readings_count = len(database.get_readings_for_worker(del_worker_id))
+                cum_exposure = database.get_cumulative_dose(del_worker_id)
+
+                st.warning(
+                    f"⚠️ You are about to remove **{worker_to_del['name']}** (`{worker_to_del['worker_id']}`). "
+                    f"This worker currently has **{readings_count}** logged exposure reading(s) (Cumulative Dose: {cum_exposure:.2f} ppm*hr)."
+                )
+
+                confirm_del = st.checkbox(
+                    f"I confirm that I want to delete worker **{worker_to_del['worker_id']}** ({worker_to_del['name']}) from the registry."
+                )
+
+                btn_delete = st.button("🚨 Delete Worker Permanently", disabled=not confirm_del, type="primary")
+
+                if btn_delete and confirm_del:
+                    success = database.delete_worker(del_worker_id)
+                    if success:
+                        st.success(f"✅ Worker **{worker_to_del['name']}** (`{del_worker_id}`) has been deleted.")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to delete worker.")
 
 # -----------------------------------------------------------------------------
-# PAGE 3: DASHBOARD
+# PAGE 4: DASHBOARD
 # -----------------------------------------------------------------------------
 elif page == "Dashboard":
     # Note: Designed to mirror DGMS/OISD-style occupational health reporting formats for industrial safety compliance.
