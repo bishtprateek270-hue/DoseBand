@@ -14,10 +14,12 @@ import cv2
 import numpy as np
 import pandas as pd
 from PIL import Image
+import importlib
 import streamlit as st
 
 import calibration
 import database
+importlib.reload(database)
 import dose_model
 import expiry_checker
 import generate_test_images
