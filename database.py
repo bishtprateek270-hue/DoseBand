@@ -27,7 +27,8 @@ DEFAULT_DB_PATH: str = "doseband.db"
 
 def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
     """
-    Initializes SQLite database and creates the 'readings' table if it does not exist.
+    Initializes SQLite database and creates 'readings' and 'workers' tables if they do not exist.
+    Seed default sample workers if worker table is empty.
 
     Args:
         db_path (str): Filepath for the SQLite database.
@@ -50,13 +51,43 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
         """
     )
 
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS workers (
+            worker_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            department TEXT NOT NULL,
+            shift TEXT NOT NULL,
+            emergency_contact TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Active'
+        );
+        """
+    )
+
     conn.commit()
+
+    # Seed default sample workers if table is empty
+    cursor.execute("SELECT COUNT(*) FROM workers;")
+    count = cursor.fetchone()[0]
+    if count == 0:
+        sample_workers = [
+            ("W-101", "Rajesh Kumar", "Mines & Extraction", "Day Shift (08:00 - 16:00)", "+91 98765 43210", "Active"),
+            ("W-102", "Anita Sharma", "Chemical Processing", "Day Shift (08:00 - 16:00)", "+91 98123 45678", "Active"),
+            ("W-103", "Vikram Singh", "Refining & Storage", "Night Shift (20:00 - 04:00)", "+91 97654 32109", "Active"),
+            ("W-104", "Suresh Patel", "Maintenance & Safety", "Swing Shift (12:00 - 20:00)", "+91 96543 21098", "Active"),
+        ]
+        cursor.executemany(
+            "INSERT INTO workers (worker_id, name, department, shift, emergency_contact, status) VALUES (?, ?, ?, ?, ?, ?);",
+            sample_workers
+        )
+        conn.commit()
+
     conn.close()
 
 
 def reset_db(db_path: str = DEFAULT_DB_PATH) -> None:
     """
-    Drops the 'readings' table and recreates an empty schema to clear demo data.
+    Drops the 'readings' and 'workers' tables and recreates empty schemas to clear demo data.
 
     Args:
         db_path (str): Filepath for the SQLite database.
@@ -64,9 +95,55 @@ def reset_db(db_path: str = DEFAULT_DB_PATH) -> None:
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("DROP TABLE IF EXISTS readings;")
+    cursor.execute("DROP TABLE IF EXISTS workers;")
     conn.commit()
     conn.close()
     init_db(db_path)
+
+
+def insert_worker(
+    worker_id: str,
+    name: str,
+    department: str,
+    shift: str,
+    emergency_contact: str,
+    status: str = "Active",
+    db_path: str = DEFAULT_DB_PATH
+) -> None:
+    """
+    Inserts or updates a worker record in the database.
+    """
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO workers (worker_id, name, department, shift, emergency_contact, status)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(worker_id) DO UPDATE SET
+            name=excluded.name,
+            department=excluded.department,
+            shift=excluded.shift,
+            emergency_contact=excluded.emergency_contact,
+            status=excluded.status;
+        """,
+        (worker_id.strip(), name.strip(), department.strip(), shift.strip(), emergency_contact.strip(), status.strip())
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_all_workers(db_path: str = DEFAULT_DB_PATH) -> pd.DataFrame:
+    """
+    Retrieves all worker records.
+    """
+    if not os.path.exists(db_path):
+        init_db(db_path)
+
+    conn = sqlite3.connect(db_path)
+    df = pd.read_sql_query("SELECT * FROM workers ORDER BY worker_id ASC;", conn)
+    conn.close()
+    return df
+
 
 
 def insert_reading(
