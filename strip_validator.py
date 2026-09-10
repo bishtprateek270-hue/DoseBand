@@ -444,26 +444,41 @@ def validate_test_strip(image_bgr: np.ndarray) -> Dict[str, Any]:
         0.10 * plaus_score
     )
 
-    # Hard-gating penalties for non-badges:
-    # If reference scale is absent (< 0.20) or H2S sensor is absent (< 0.20), hard-cap the score
-    if ref_score < 0.20:
-        final_score = min(weighted_composite, 0.44)
-    elif h2s_score < 0.20:
+    # Hard-gating penalties for non-badges and invalid images:
+    # 1. Reference scale failure (must be present with distinct descending grayscale steps)
+    if ref_score < 0.60 or ref_diag.get("monotonic_steps", 0) < 3 or ref_diag.get("dynamic_range", 0) < 50.0:
+        final_score = min(weighted_composite, 0.45)
+    # 2. H2S sensor region missing
+    elif h2s_score < 0.35:
         final_score = min(weighted_composite, 0.42)
-    elif layout_score < 0.25:
-        final_score = min(weighted_composite, 0.52)
+    # 3. Layout abnormality (not a badge geometry)
+    elif layout_score < 0.35:
+        final_score = min(weighted_composite, 0.48)
+    # 4. Blur / focus failure (Laplacian variance < 35.0)
+    elif quality_diag.get("sharpness", 0) < 35.0:
+        final_score = min(weighted_composite, 0.45)
+    # 5. Non-chemical high texture / UI screenshot / vivid colors
+    elif plaus_diag.get("edge_density", 0) > 0.08 or plaus_diag.get("mean_sat", 0) > 100.0:
+        final_score = min(weighted_composite, 0.45)
     else:
         final_score = weighted_composite
 
     final_score = float(np.clip(final_score, 0.0, 1.0))
     confidence_pct = int(round(final_score * 100))
 
-    # Status classification
-    if final_score >= 0.80:
+    # Strict Status classification:
+    # A test strip is ONLY Valid if final_score >= 0.80, reference scale is verified, and there are NO blocking rejection reasons
+    has_hard_rejection = bool(
+        len(all_reasons) > 0 or
+        ref_score < 0.65 or
+        quality_diag.get("sharpness", 0) < 35.0
+    )
+
+    if final_score >= 0.80 and not has_hard_rejection:
         status = "Valid"
         is_valid = True
         user_msg = "✅ Valid DoseBand H₂S dosimeter badge verified. Ready for optical ML analysis."
-    elif final_score >= 0.65:
+    elif final_score >= 0.65 and not has_hard_rejection:
         status = "Uncertain"
         is_valid = False
         user_msg = UNCERTAIN_IMAGE_MESSAGE
