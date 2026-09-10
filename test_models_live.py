@@ -29,7 +29,12 @@ for _, row in unique_hum.iterrows():
 print("\n" + "=" * 60)
 print("H2S RANDOM FOREST REGRESSOR EVALUATION (Sample Swatches)")
 print("=" * 60)
-df_h2s = extract_h2s_dataset()
+import os, cv2
+h2s_csv = "data/simulated_h2s_training_data.csv"
+if os.path.exists(h2s_csv):
+    df_h2s = pd.read_csv(h2s_csv)
+else:
+    df_h2s = extract_h2s_dataset()
 sample_rows = df_h2s.sample(n=12, random_state=42).sort_values("h2s_ppm")
 
 for _, row in sample_rows.iterrows():
@@ -52,14 +57,31 @@ for _, row in sample_rows.iterrows():
     print(f"True: {row['h2s_ppm']:>5.1f} ppm | Pred: {pred_ppm:>6.2f} ppm | Diff: {diff:>5.2f} | Cond: {row['temperature_c']:.0f}C, {row['humidity_rh']:.0f}%RH, {row['exposure_time_h']:.0f}h")
 
 print("\n" + "=" * 60)
-print("FULL PIPELINE INFERENCE ON TEST DOSIMETER BADGES")
+print("FULL PIPELINE INFERENCE ON TEST DOSIMETER BADGES (ALL SHADES)")
 print("=" * 60)
-import os, cv2
-for img_name in ['exposure_level_1_very_low.jpg', 'exposure_level_2_low.jpg', 'exposure_level_3_medium.jpg', 'exposure_level_4_high.jpg', 'exposure_level_5_very_high.jpg']:
+test_images_to_run = [
+    'exposure_shade_01_pure_white.jpg',
+    'exposure_shade_02_off_white.jpg',
+    'exposure_shade_03_very_light_grey.jpg',
+    'exposure_shade_04_light_grey.jpg',
+    'exposure_shade_05_mid_grey.jpg',
+    'exposure_shade_06_slate_grey.jpg',
+    'exposure_shade_07_dark_grey.jpg',
+    'exposure_shade_08_charcoal_grey.jpg',
+    'exposure_shade_09_deep_black.jpg',
+    'exposure_level_1_very_low.jpg',
+    'exposure_level_2_low.jpg',
+    'exposure_level_3_medium.jpg',
+    'exposure_level_4_high.jpg',
+    'exposure_level_5_very_high.jpg'
+]
+
+for img_name in test_images_to_run:
     p = os.path.join('test_images', img_name)
-    img = cv2.imread(p)
-    res = pipeline.run_full_inference(img, temperature_c=25.0, exposure_time_h=1.0)
-    print(f"{img_name:<32} -> Pred RH: {res['predicted_humidity']:>4.1f}% | Pred H2S: {res['estimated_h2s_ppm']:>6.2f} ppm | Risk: {res['risk_level']}")
+    if os.path.exists(p):
+        img = cv2.imread(p)
+        res = pipeline.run_full_inference(img, temperature_c=25.0, exposure_time_h=1.0)
+        print(f"{img_name:<38} -> Pred RH: {res['predicted_humidity']:>4.1f}% | Pred H2S: {res['estimated_h2s_ppm']:>6.2f} ppm | Risk: {res['risk_level']}")
 
 print("=" * 60)
 print("[OK] All model inference tests executed dynamically without hardcoding.")

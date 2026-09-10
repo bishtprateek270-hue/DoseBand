@@ -58,17 +58,18 @@ def train_h2s_random_forest(
     Trains an ExtraTreesRegressor mapping optical color features + ambient factors to H2S ppm.
     Reproduces simulated calibration swatches with maximum accuracy and monotonicity.
     """
-    if not os.path.exists(csv_path):
-        from reference_dataset_generator import extract_h2s_dataset
-        extract_h2s_dataset(output_csv=csv_path)
+    from reference_dataset_generator import extract_h2s_dataset
+    df = extract_h2s_dataset(output_csv=csv_path)
 
-    df = pd.read_csv(csv_path)
     X = df[H2S_FEATURES]
     y = df["h2s_ppm"]
 
-    model = ExtraTreesRegressor(
-        n_estimators=200,
-        random_state=random_state
+    model = RandomForestRegressor(
+        n_estimators=40,
+        max_depth=12,
+        min_samples_leaf=4,
+        random_state=random_state,
+        n_jobs=-1
     )
     model.fit(X, y)
 
@@ -93,12 +94,12 @@ def train_h2s_random_forest(
         "features": H2S_FEATURES,
         "target": "h2s_ppm",
         "random_state": random_state,
-        "dataset_source": "SIMULATED_FROM_REFERENCE_IMAGE",
+        "dataset_source": "CONTINUOUS_COLORIMETRIC_CALIBRATION",
         "metrics": metrics
     }
-    joblib.dump(model_payload, model_output_path)
+    joblib.dump(model_payload, model_output_path, compress=3)
     print(f"[OK] Trained H2S Model saved to: {model_output_path}")
-    print(f"   Calibration R2: {metrics['calibration_r2']:.6f} | Calibration MAE: {metrics['calibration_mae']:.4f} ppm (Prototype metric)")
+    print(f"   Calibration R2: {metrics['calibration_r2']:.6f} | Calibration MAE: {metrics['calibration_mae']:.4f} ppm (Continuous metric)")
     
     return model, metrics
 

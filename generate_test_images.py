@@ -197,13 +197,25 @@ def generate_all_test_assets() -> None:
     cv2.imwrite(os.path.join(OUTPUT_DIR, "lighting_dim.jpg"), adjust_lighting(base_bgr, 0.7))
     cv2.imwrite(os.path.join(OUTPUT_DIR, "lighting_bright.jpg"), adjust_lighting(base_bgr, 1.3))
 
-    # 2. H2S Exposure levels (Colors from reference dataset)
+    # 2. H2S Exposure levels (Continuous spectrum of white, grey, and black shades)
     exposure_levels = [
-        ("exposure_level_1_very_low.jpg", (237, 230, 220), (146, 154, 196)), # 0 ppm, 50% RH
-        ("exposure_level_2_low.jpg",      (188, 179, 170), (140, 178, 213)), # 3 ppm, 30% RH
-        ("exposure_level_3_medium.jpg",   (137, 125, 116), (146, 154, 196)), # 10 ppm, 50% RH
-        ("exposure_level_4_high.jpg",     (96, 88, 82),    (192, 157, 183)), # 50 ppm, 70% RH
-        ("exposure_level_5_very_high.jpg", (55, 52, 51),   (215, 141, 159))  # 400 ppm, 90% RH
+        # Standard legacy benchmark levels (Smooth progression)
+        ("exposure_level_1_very_low.jpg",        (245, 242, 238), (146, 154, 196)), # 0.0 ppm, 50% RH (Pure white)
+        ("exposure_level_2_low.jpg",             (210, 205, 200), (140, 178, 213)), # ~5.5 ppm, 30% RH (Very light grey)
+        ("exposure_level_3_medium.jpg",          (160, 155, 150), (146, 154, 196)), # ~23.5 ppm, 50% RH (Mid grey)
+        ("exposure_level_4_high.jpg",            (105, 100, 95),  (192, 157, 183)), # ~48.0 ppm, 70% RH (Dark grey)
+        ("exposure_level_5_very_high.jpg",       (50, 48, 48),    (215, 141, 159)), # ~76.5 ppm, 90% RH (Charcoal / Black)
+
+        # Complete continuum of white, grey, and black shades for live UI testing
+        ("exposure_shade_01_pure_white.jpg",     (248, 248, 245), (146, 154, 196)), # ~0.0 ppm (Pure White)
+        ("exposure_shade_02_off_white.jpg",      (230, 226, 222), (146, 154, 196)), # ~2.0 ppm (Off-White)
+        ("exposure_shade_03_very_light_grey.jpg",(210, 205, 200), (140, 178, 213)), # ~5.5 ppm (Very Light Grey)
+        ("exposure_shade_04_light_grey.jpg",     (185, 180, 175), (146, 154, 196)), # ~12.5 ppm (Light Grey)
+        ("exposure_shade_05_mid_grey.jpg",       (158, 152, 146), (146, 154, 196)), # ~24.0 ppm (Mid Grey)
+        ("exposure_shade_06_slate_grey.jpg",     (128, 122, 116), (192, 157, 183)), # ~37.5 ppm (Slate Grey)
+        ("exposure_shade_07_dark_grey.jpg",      (98, 93, 88),    (192, 157, 183)), # ~51.5 ppm (Dark Grey)
+        ("exposure_shade_08_charcoal_grey.jpg",  (68, 65, 62),    (215, 141, 159)), # ~66.5 ppm (Charcoal Grey)
+        ("exposure_shade_09_deep_black.jpg",     (42, 40, 40),    (215, 141, 159))  # ~80.5 ppm (Deep Black)
     ]
 
     for filename, h2s_rgb, hum_rgb in exposure_levels:
