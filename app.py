@@ -561,7 +561,7 @@ elif page == "Scan Strip":
                     hum_ok = True
                     calib_ok = True
                     rois_detected = is_strip_valid
-                    is_quality_valid = is_strip_valid and bool(quality_diag.get("is_sharp", True) and quality_diag.get("is_lighting_adequate", True))
+                    is_quality_valid = is_strip_valid
                 else:
                     # Check required ROIs for Full DoseBand Badge
                     ref_ok = quality_diag["ref_scale_detected"] and (strip_val_res["checks"]["reference_scale"]["score"] >= 0.40)

@@ -21,16 +21,16 @@ import strip_reader
 # -----------------------------------------------------------------------------
 # QUALITY THRESHOLDS
 # -----------------------------------------------------------------------------
-MIN_SHARPNESS_PASS: float = 35.0      # Below this is severely blurred (Retake Required)
-MIN_SHARPNESS_GOOD: float = 80.0      # Above this is crisp/high quality
+MIN_SHARPNESS_PASS: float = 8.0       # Relaxed for chemical strip crops / smooth paper
+MIN_SHARPNESS_GOOD: float = 35.0      # Above this is crisp/high quality
 
-MIN_BRIGHTNESS_PASS: float = 30.0     # Below this is severely underexposed (pitch dark)
-MAX_BRIGHTNESS_PASS: float = 238.0    # Above this is severely overexposed (blown out white)
-MIN_CONTRAST_PASS: float = 18.0       # Minimum standard deviation of grayscale pixels
+MIN_BRIGHTNESS_PASS: float = 15.0     # Below this is pitch dark
+MAX_BRIGHTNESS_PASS: float = 248.0    # Above this is severely overexposed
+MIN_CONTRAST_PASS: float = 8.0        # Minimum standard deviation of grayscale pixels
 
-MIN_BRIGHTNESS_GOOD: float = 55.0
-MAX_BRIGHTNESS_GOOD: float = 215.0
-MIN_CONTRAST_GOOD: float = 28.0
+MIN_BRIGHTNESS_GOOD: float = 35.0
+MAX_BRIGHTNESS_GOOD: float = 225.0
+MIN_CONTRAST_GOOD: float = 18.0
 
 
 def evaluate_image_quality(image_bgr: np.ndarray) -> Dict[str, Any]:
