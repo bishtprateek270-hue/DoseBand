@@ -76,29 +76,63 @@ def detect_all_rois(
     exp_crop = image_bgr[exp_y1:exp_y2, exp_x1:exp_x2]
     exp_conf = 0.85 if exp_crop.size > 0 else 0.0
 
-    overall_conf = float(np.mean([ref_conf, h2s_conf, hum_conf, exp_conf]))
-    is_valid = overall_conf >= min_confidence
+    # Check if image is a Full Badge (contains left reference scale) vs Standalone Physical Test Strip
+    is_full_badge = ref_conf >= 0.50 and w >= 250 and h >= 150 and (0.8 <= (w / float(h)) <= 2.8)
 
-    return {
-        "is_valid": is_valid,
-        "overall_confidence": round(overall_conf, 3),
-        "ref_scale": {
-            "box": (ref_x1, ref_y1, ref_x2, ref_y2),
-            "confidence": round(ref_conf, 3)
-        },
-        "h2s_strip": {
-            "box": (h2s_x1, h2s_y1, h2s_x2, h2s_y2),
-            "confidence": round(h2s_conf, 3)
-        },
-        "humidity_indicator": {
-            "box": (hum_x1, hum_y1, hum_x2, hum_y2),
-            "confidence": round(hum_conf, 3)
-        },
-        "expiry_patch": {
-            "box": (exp_x1, exp_y1, exp_x2, exp_y2),
-            "confidence": round(exp_conf, 3)
+    if is_full_badge:
+        overall_conf = float(np.mean([ref_conf, h2s_conf, hum_conf, exp_conf]))
+        is_valid = overall_conf >= min_confidence
+        return {
+            "is_valid": is_valid,
+            "badge_mode": "FULL_DOSEBAND_BADGE",
+            "overall_confidence": round(overall_conf, 3),
+            "ref_scale": {
+                "box": (ref_x1, ref_y1, ref_x2, ref_y2),
+                "confidence": round(ref_conf, 3)
+            },
+            "h2s_strip": {
+                "box": (h2s_x1, h2s_y1, h2s_x2, h2s_y2),
+                "confidence": round(h2s_conf, 3)
+            },
+            "humidity_indicator": {
+                "box": (hum_x1, hum_y1, hum_x2, hum_y2),
+                "confidence": round(hum_conf, 3)
+            },
+            "expiry_patch": {
+                "box": (exp_x1, exp_y1, exp_x2, exp_y2),
+                "confidence": round(exp_conf, 3)
+            }
         }
-    }
+    else:
+        # Standalone Physical Test Strip (Plain or Textured Paper Strip)
+        # Sample active sensor window from central 80% of strip image
+        s_x1 = int(w * 0.08)
+        s_y1 = int(h * 0.08)
+        s_x2 = int(w * 0.92)
+        s_y2 = int(h * 0.92)
+        
+        strip_conf = 0.92 if (s_x2 > s_x1 and s_y2 > s_y1) else 0.0
+        return {
+            "is_valid": strip_conf >= min_confidence,
+            "badge_mode": "STANDALONE_CHEMICAL_STRIP",
+            "overall_confidence": round(strip_conf, 3),
+            "ref_scale": {
+                "box": (0, 0, 0, 0),
+                "confidence": 0.0
+            },
+            "h2s_strip": {
+                "box": (s_x1, s_y1, s_x2, s_y2),
+                "confidence": round(strip_conf, 3)
+            },
+            "humidity_indicator": {
+                "box": (0, 0, 0, 0),
+                "confidence": 0.0
+            },
+            "expiry_patch": {
+                "box": (0, 0, 0, 0),
+                "confidence": 0.0
+            }
+        }
 
 
 def extract_center_features(

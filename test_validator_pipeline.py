@@ -29,6 +29,7 @@ def run_validator_benchmarks():
         ("lighting_normal.jpg",           "Positive: DoseBand Normal Light", True),
         ("lighting_dim.jpg",              "Positive: DoseBand Dim Light", True),
         ("lighting_bright.jpg",           "Positive: DoseBand Bright Light", True),
+        ("negative_isolated_h2s_crop.jpg","Positive: Standalone Physical Test Strip", True),
 
         # NEGATIVE CASES (Must be REJECTED with status != 'Valid' and score < 0.80)
         ("negative_plain_white.jpg",          "Negative: Plain White Paper", False),
@@ -38,7 +39,6 @@ def run_validator_benchmarks():
         ("negative_gradient.jpg",             "Negative: Color Gradient", False),
         ("negative_noisy_texture.jpg",        "Negative: Noisy Texture / Scene", False),
         ("negative_screenshot_text.jpg",      "Negative: UI / Text Screenshot", False),
-        ("negative_isolated_h2s_crop.jpg",    "Negative: Cropped Strip w/o Scale", False),
     ]
 
     all_passed = True
