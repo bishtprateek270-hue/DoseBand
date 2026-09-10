@@ -509,14 +509,6 @@ elif page == "Scan Strip":
                 if os.path.exists(sample_filepath):
                     with open(sample_filepath, "rb") as f:
                         image_bytes_to_process = f.read()
-                    st.markdown(
-                        f"""
-                        <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid #10B981; padding: 0.4rem 0.75rem; border-radius: 0.35rem; margin-top: 0.35rem; font-size: 0.84rem; color: #F1F5F9;">
-                            📁 <b>Loaded Sample Asset:</b> <code style="color: #34D399; background-color: #0F172A; padding: 2px 6px; border-radius: 4px; font-weight: 700;">{sample_filename}</code>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
             else:
                 uploaded_file = st.file_uploader("Upload Image File", type=["jpg", "jpeg", "png"])
                 if uploaded_file is not None:
@@ -527,76 +519,11 @@ elif page == "Scan Strip":
             if camera_file is not None:
                 image_bytes_to_process = camera_file.getvalue()
 
-        # Step 3: Ambient Environmental Conditions & Exposure Duration
-        st.subheader("Step 3: Exposure & Environmental Parameters")
-        st.caption("Configure shift duration, ambient temperature, and relative humidity for ML sensor inference.")
-
-        env_c1, env_c2 = st.columns(2)
-        with env_c1:
-            ambient_temp = st.number_input(
-                "🌡️ Ambient Temp (°C) [Manual / Demo]",
-                min_value=-10.0,
-                max_value=60.0,
-                value=25.0,
-                step=0.5,
-                format="%.1f",
-                help="Manual / Demo Ambient Input. Reference baseline is 25.0°C. Temperature affects lead acetate chemical reaction kinetics."
-            )
-            exposure_time = st.number_input(
-                "⏱️ Shift Exposure Duration (hours)",
-                min_value=0.5,
-                max_value=24.0,
-                value=1.0,
-                step=0.5,
-                format="%.1f",
-                help="Exposure time duration in hours used by the RandomForest model to estimate H2S concentration and cumulative dose."
-            )
-        with env_c2:
-            humidity_input_mode = st.radio(
-                "💧 Relative Humidity Source",
-                ["🤖 Optical Humidity Card (KNN)", "✏️ Manual Ambient Input (%)"],
-                horizontal=True
-            )
-            manual_humidity = None
-            if humidity_input_mode == "✏️ Manual Ambient Input (%)":
-                manual_humidity = st.number_input(
-                    "💧 Manual Ambient RH (%)",
-                    min_value=0.0,
-                    max_value=100.0,
-                    value=50.0,
-                    step=1.0,
-                    format="%.1f",
-                    help="Manual hygrometer measurement override."
-                )
-            else:
-                st.markdown(
-                    """
-                    <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid #38BDF8; padding: 0.6rem 0.85rem; border-radius: 0.4rem; margin-top: 0.35rem;">
-                        <strong style="font-size: 0.84rem; color: #38BDF8;">KNN Indicator Card Model:</strong><br/>
-                        <span style="font-size: 0.82rem; color: #F1F5F9; line-height: 1.4; display: inline-block; margin-top: 2px;">
-                            Relative humidity will be dynamically extracted and classified from the circular humidity card on the badge.
-                        </span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        # Dynamic live preview of prototype compensation factor
-        comp_preview = environmental_compensation.calculate_compensation_factor(ambient_temp, manual_humidity if manual_humidity is not None else 50.0)
-        live_cf = comp_preview["compensation_factor"]
-        cf_pct_diff = (live_cf - 1.0) * 100.0
-        cf_color = "#34D399" if abs(cf_pct_diff) < 0.1 else ("#FBBF24" if live_cf > 1.0 else "#60A5FA")
-
-        st.markdown(
-            f"""
-            <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid {cf_color}; padding: 0.55rem 0.85rem; border-radius: 0.4rem; margin-top: 0.5rem; margin-bottom: 0.75rem;">
-                <span style="font-size: 0.83rem; color: #E2E8F0; font-weight: 600;">Prototype Kinetic Factor (CF):</span>
-                <strong style="color: {cf_color}; font-size: 0.95rem; margin-left: 0.5rem;">{live_cf:.4f}</strong>
-                <span style="font-size: 0.78rem; color: #CBD5E1; margin-left: 0.4rem; font-weight: 600;">({'+' if cf_pct_diff >= 0 else ''}{cf_pct_diff:.1f}% vs 25°C/50% RH)</span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        # Operational parameters (Automated optical humidity extraction via KNN model)
+        ambient_temp = 25.0
+        exposure_time = 1.0
+        humidity_input_mode = "🤖 Optical Humidity Card (KNN)"
+        manual_humidity = None
 
     with col2:
         is_quality_valid = False
@@ -832,19 +759,6 @@ elif page == "Scan Strip":
 
                     # Unified Badge Validity Gate (Profile Active/Unexpired AND Optical Patch Unexpired)
                     is_badge_fully_valid = is_worker_id_valid and not is_optical_expired
-
-                    # Mandatory Prototype Disclaimer Banner
-                    st.markdown(
-                        f"""
-                        <div style="background-color: #1E293B; border: 1px solid #EA580C; border-left: 4px solid #EA580C; border-radius: 0.5rem; padding: 0.85rem 1rem; margin-top: 1rem; margin-bottom: 1rem;">
-                            <strong style="color: #FB923C; font-size: 0.95rem;">⚠️ PROTOTYPE ESTIMATE DISCLAIMER</strong>
-                            <p style="font-size: 0.85rem; color: #F1F5F9; margin-top: 0.35rem; margin-bottom: 0; line-height: 1.4;">
-                                {inference_engine.PROTOTYPE_DISCLAIMER}
-                            </p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
 
                     if not is_badge_fully_valid:
                         # Expired or invalid badge -> Strictly BLOCK saving and classification
