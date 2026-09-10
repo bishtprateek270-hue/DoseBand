@@ -641,10 +641,10 @@ elif page == "Scan Strip":
                                 unsafe_allow_html=True
                             )
 
-                if not is_strip_valid and strip_val_res["rejection_reasons"]:
+                if not is_strip_valid:
                     st.error(
-                        "🚨 **Validation Rejection Reasons (Analysis Blocked):**\n" +
-                        "\n".join([f"• {r}" for r in strip_val_res["rejection_reasons"]])
+                        "⚠️ **Optical Alignment Error:** Unable to detect a valid DoseBand H₂S dosimeter badge in the camera frame. "
+                        "Please align the complete badge flat within the frame under steady, uniform lighting."
                     )
 
                 # -------------------------------------------------------------
@@ -729,7 +729,7 @@ elif page == "Scan Strip":
             if not is_worker_id_valid:
                 st.caption("🔒 *Analysis blocked: Worker badge is expired, inactive, or unverified. Please resolve worker credentials above.*")
             elif not is_strip_valid:
-                st.caption("🔒 *Analysis strictly blocked: Only genuine DoseBand H₂S strips with a verified reference scale can be analyzed.*")
+                st.caption("🔒 *Analysis disabled: Please position a valid DoseBand H₂S dosimeter badge with clear optical reference scale in view.*")
             elif not is_quality_valid:
                 st.caption("🔒 *Analysis disabled: Please resolve image blur/lighting quality issues indicated above (Retake Required).*")
             elif not rois_detected:

@@ -20,8 +20,8 @@ from typing import Dict, Any, List, Tuple, Optional
 import cv2
 import numpy as np
 
-INVALID_IMAGE_MESSAGE = "Unsupported image. Please scan a valid DoseBand H₂S test strip with the reference scale visible."
-UNCERTAIN_IMAGE_MESSAGE = "Test strip could not be verified reliably. Please retake the image with the complete DoseBand visible and good lighting."
+INVALID_IMAGE_MESSAGE = "Unable to verify a valid DoseBand H₂S dosimeter strip. Please align the complete badge within the frame."
+UNCERTAIN_IMAGE_MESSAGE = "Image alignment or lighting could not be verified reliably. Please hold the camera steady and retake."
 
 
 def verify_reference_scale(image_bgr: np.ndarray) -> Tuple[float, Dict[str, Any], List[str]]:
