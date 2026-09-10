@@ -30,7 +30,7 @@ print("\n" + "=" * 60)
 print("H2S RANDOM FOREST REGRESSOR EVALUATION (Sample Swatches)")
 print("=" * 60)
 import os, cv2
-h2s_csv = "data/simulated_h2s_training_data.csv"
+h2s_csv = "data/h2s_training_data.csv"
 if os.path.exists(h2s_csv):
     df_h2s = pd.read_csv(h2s_csv)
 else:

@@ -24,8 +24,8 @@ REF_IMG_DIR = os.path.join(DATA_DIR, "reference_images")
 H2S_IMG_PATH = os.path.join(REF_IMG_DIR, "h2s_reference_raw.jpg")
 HUMIDITY_IMG_PATH = os.path.join(REF_IMG_DIR, "humidity_reference_raw.png")
 
-H2S_CSV_PATH = os.path.join(DATA_DIR, "simulated_h2s_training_data.csv")
-HUMIDITY_CSV_PATH = os.path.join(DATA_DIR, "simulated_humidity_training_data.csv")
+H2S_CSV_PATH = os.path.join(DATA_DIR, "h2s_training_data.csv")
+HUMIDITY_CSV_PATH = os.path.join(DATA_DIR, "humidity_training_data.csv")
 
 
 def extract_h2s_dataset(

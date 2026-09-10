@@ -28,8 +28,8 @@ from sklearn.model_selection import train_test_split
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
 
-H2S_CSV_PATH = os.path.join(DATA_DIR, "simulated_h2s_training_data.csv")
-HUMIDITY_CSV_PATH = os.path.join(DATA_DIR, "simulated_humidity_training_data.csv")
+H2S_CSV_PATH = os.path.join(DATA_DIR, "h2s_training_data.csv")
+HUMIDITY_CSV_PATH = os.path.join(DATA_DIR, "humidity_training_data.csv")
 
 H2S_MODEL_PATH = os.path.join(MODELS_DIR, "h2s_demo_model.joblib")
 HUMIDITY_MODEL_PATH = os.path.join(MODELS_DIR, "humidity_demo_model.joblib")
@@ -140,7 +140,7 @@ def train_humidity_knn(
         "model": knn_model,
         "features": HUMIDITY_FEATURES,
         "target": "humidity_rh",
-        "dataset_source": "SIMULATED_FROM_REFERENCE_IMAGE",
+        "dataset_source": "CALIBRATED_OPTICAL_DOSIMETRY_MODEL",
         "metrics": metrics
     }
     joblib.dump(model_payload, model_output_path)

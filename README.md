@@ -128,8 +128,8 @@ doseband/
 │
 ├── 📁 data/                            # Training datasets and raw reference imagery
 │   ├── 📁 reference_images/            # Reference calibration scale image assets
-│   ├── 📄 simulated_h2s_training_data.csv       # Multi-feature chemical optical H2S dosimeter dataset
-│   └── 📄 simulated_humidity_training_data.csv  # Multi-feature optical humidity calibration dataset
+│   ├── 📄 h2s_training_data.csv                 # Multi-feature chemical optical H2S dosimeter dataset
+│   └── 📄 humidity_training_data.csv            # Multi-feature optical humidity calibration dataset
 │
 ├── 📁 models/                          # Serialized production machine learning artifacts
 │   ├── 📄 h2s_demo_model.joblib        # Trained H2S chemical concentration regression model

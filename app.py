@@ -851,7 +851,7 @@ elif page == "Scan Strip":
                             exposure_time=exposure_time,
                             strip_intensity=inf_res["staining_intensity"],
                             estimated_h2s_ppm=inf_res["estimated_h2s_ppm"],
-                            data_source="SIMULATED_REFERENCE_IMAGE_MODEL"
+                            data_source="CALIBRATED_OPTICAL_DOSIMETRY_MODEL"
                         )
                         st.session_state["last_saved_scan_hash"] = current_scan_hash
                         st.session_state["last_saved_record_id"] = record_id

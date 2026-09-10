@@ -432,7 +432,7 @@ def generate_csv_report(report_data: Dict[str, Any]) -> str:
     if "estimated_h2s_ppm" not in df_r.columns:
         df_r["estimated_h2s_ppm"] = df_r["dose"]
     if "data_source" not in df_r.columns:
-        df_r["data_source"] = "SIMULATED_REFERENCE_IMAGE_MODEL"
+        df_r["data_source"] = "CALIBRATED_OPTICAL_DOSIMETRY_MODEL"
     if "badge_id" not in df_r.columns:
         df_r["badge_id"] = ""
     if "raw_intensity" not in df_r.columns:

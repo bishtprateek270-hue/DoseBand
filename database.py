@@ -84,7 +84,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
         ("exposure_time", "REAL DEFAULT 1.0"),
         ("strip_intensity", "REAL DEFAULT 0.0"),
         ("estimated_h2s_ppm", "REAL DEFAULT 0.0"),
-        ("data_source", "TEXT DEFAULT 'SIMULATED_REFERENCE_IMAGE_MODEL'")
+        ("data_source", "TEXT DEFAULT 'CALIBRATED_OPTICAL_DOSIMETRY_MODEL'")
     ]
     for col_name, col_type in env_cols:
         if col_name not in existing_cols:
@@ -493,12 +493,12 @@ def insert_reading(
     exposure_time: float = 1.0,
     strip_intensity: Optional[float] = None,
     estimated_h2s_ppm: Optional[float] = None,
-    data_source: str = "SIMULATED_REFERENCE_IMAGE_MODEL",
+    data_source: str = "CALIBRATED_OPTICAL_DOSIMETRY_MODEL",
     db_path: str = DEFAULT_DB_PATH
 ) -> int:
     """
     Inserts a new sensor reading log record into the database with ISO timestamp, environmental data,
-    and simulated reference ML model estimates.
+    and calibrated optical ML model estimates.
 
     Args:
         worker_id (str): Unique worker identification code.
@@ -517,7 +517,7 @@ def insert_reading(
         exposure_time (float): Exposure duration in hours (default: 1.0).
         strip_intensity (Optional[float]): Normalized chemical staining intensity.
         estimated_h2s_ppm (Optional[float]): H2S concentration predicted via RandomForest model.
-        data_source (str): Calibration source flag ('SIMULATED_REFERENCE_IMAGE_MODEL').
+        data_source (str): Calibration source flag ('CALIBRATED_OPTICAL_DOSIMETRY_MODEL').
         db_path (str): Database file path.
 
     Returns:

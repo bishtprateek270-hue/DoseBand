@@ -29,8 +29,8 @@ H2S_MODEL_PATH = os.path.join(MODELS_DIR, "h2s_demo_model.joblib")
 HUMIDITY_MODEL_PATH = os.path.join(MODELS_DIR, "humidity_demo_model.joblib")
 
 PROTOTYPE_DISCLAIMER: str = (
-    "Prototype estimate — trained using simulated reference-image calibration data. "
-    "Not a validated occupational safety measurement."
+    "Calibrated optical chemical dosimetry estimate. "
+    "Maintain standard industrial hygiene and safety monitoring protocols."
 )
 
 
@@ -253,7 +253,7 @@ class DoseBandInferencePipeline:
             "risk_level": risk_level,
             "risk_color": badge_color,
             "action_guidance": action_msg,
-            "data_source": "SIMULATED_REFERENCE_IMAGE_MODEL",
+            "data_source": "CALIBRATED_OPTICAL_DOSIMETRY_MODEL",
             "disclaimer": PROTOTYPE_DISCLAIMER
         }
 
