@@ -553,16 +553,25 @@ elif page == "Scan Strip":
                 strip_val_status = strip_val_res["status"]
 
                 roi_detections = roi_detector.detect_all_rois(preview_bgr)
+                is_standalone_strip = (roi_detections.get("badge_mode") == "STANDALONE_CHEMICAL_STRIP")
 
-                # Check required ROIs
-                ref_ok = quality_diag["ref_scale_detected"] and (strip_val_res["checks"]["reference_scale"]["score"] >= 0.40)
-                strip_ok = quality_diag["sensor_strip_detected"] and is_strip_valid
-                if humidity_input_mode == "🤖 Optical Humidity Card (KNN)":
-                    hum_ok = (roi_detections["humidity_indicator"]["confidence"] >= 0.50)
+                if is_standalone_strip:
+                    ref_ok = True
+                    strip_ok = is_strip_valid
+                    hum_ok = True
+                    calib_ok = True
+                    rois_detected = is_strip_valid
+                    is_quality_valid = is_strip_valid and bool(quality_diag.get("is_sharp", True) and quality_diag.get("is_lighting_adequate", True))
                 else:
-                    hum_ok = (manual_humidity is not None)
-                calib_ok = quality_diag["calibration_successful"] and is_strip_valid
-                rois_detected = bool(ref_ok and strip_ok and hum_ok)
+                    # Check required ROIs for Full DoseBand Badge
+                    ref_ok = quality_diag["ref_scale_detected"] and (strip_val_res["checks"]["reference_scale"]["score"] >= 0.40)
+                    strip_ok = quality_diag["sensor_strip_detected"] and is_strip_valid
+                    if humidity_input_mode == "🤖 Optical Humidity Card (KNN)":
+                        hum_ok = (roi_detections["humidity_indicator"]["confidence"] >= 0.50)
+                    else:
+                        hum_ok = (manual_humidity is not None)
+                    calib_ok = quality_diag["calibration_successful"] and is_strip_valid
+                    rois_detected = bool(ref_ok and strip_ok and hum_ok)
 
                 # Show preview tabs: Annotated Multi-ROI Visual Overlay vs Raw Image
                 tab_preview_roi, tab_preview_raw = st.tabs(["🎯 Detected ROIs Overlay", "📷 Original Photo"])
@@ -581,14 +590,16 @@ elif page == "Scan Strip":
                 st.markdown("<h4 class='section-header'>🛡️ Mandatory Test-Strip Validation</h4>", unsafe_allow_html=True)
 
                 if strip_val_status == "Valid":
+                    badge_label = "VERIFIED STRIP" if is_standalone_strip else "VERIFIED BADGE"
+                    badge_desc = "Physical chemical test strip (textured/plain paper) verified." if is_standalone_strip else "DoseBand H₂S badge structure & 5-step reference scale verified."
                     strip_badge_html = f"""
                     <div style="background-color: #1E293B; border: 1px solid #10B981; border-left: 4px solid #10B981; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
                         <div>
                             <strong style="color: #34D399; font-size: 1rem;">🟢 Test Strip: VALID ({strip_val_pct}%)</strong>
-                            <div style="color: #F1F5F9; font-size: 0.84rem; margin-top: 2px;">DoseBand H₂S badge structure & 5-step reference scale verified.</div>
+                            <div style="color: #F1F5F9; font-size: 0.84rem; margin-top: 2px;">{badge_desc}</div>
                         </div>
                         <span style="background-color: #10B981; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px; letter-spacing: 0.03em;">
-                            VERIFIED BADGE
+                            {badge_label}
                         </span>
                     </div>
                     """
@@ -644,8 +655,8 @@ elif page == "Scan Strip":
 
                 if not is_strip_valid:
                     st.error(
-                        "⚠️ **Optical Alignment Error:** Unable to detect a valid DoseBand H₂S dosimeter badge in the camera frame. "
-                        "Please align the complete badge flat within the frame under steady, uniform lighting."
+                        "⚠️ **Optical Alignment Error:** Unable to detect a valid DoseBand H₂S dosimeter strip/badge in the camera frame. "
+                        "Please align the strip flat within the frame under steady, uniform lighting."
                     )
 
                 # -------------------------------------------------------------
@@ -657,12 +668,13 @@ elif page == "Scan Strip":
                 ind_col1, ind_col2, ind_col3, ind_col4 = st.columns(4)
 
                 with ind_col1:
+                    ref_text = '✅ Direct Optical Strip' if is_standalone_strip else ('✅ Monotonic (5-Step)' if ref_ok else '❌ Missing / Invalid')
                     st.markdown(
                         f"""
                         <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid {'#10B981' if ref_ok else '#EF4444'}; padding: 0.65rem 0.8rem; border-radius: 0.4rem;">
                             <div style="font-size: 0.76rem; color: #CBD5E1; font-weight: 600;">📌 Reference Scale</div>
                             <strong style="color: {'#4ADE80' if ref_ok else '#F87171'}; font-size: 0.85rem;">
-                                {'✅ Monotonic (5-Step)' if ref_ok else '❌ Missing / Invalid'}
+                                {ref_text}
                             </strong>
                         </div>
                         """,
@@ -670,12 +682,13 @@ elif page == "Scan Strip":
                     )
 
                 with ind_col2:
+                    strip_text = '✅ Verified Paper Strip' if is_standalone_strip else ('✅ Verified Paper' if strip_ok else '❌ Rejected')
                     st.markdown(
                         f"""
                         <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid {'#10B981' if strip_ok else '#EF4444'}; padding: 0.65rem 0.8rem; border-radius: 0.4rem;">
                             <div style="font-size: 0.76rem; color: #CBD5E1; font-weight: 600;">🧪 H2S Sensor Strip</div>
                             <strong style="color: {'#4ADE80' if strip_ok else '#F87171'}; font-size: 0.85rem;">
-                                {'✅ Verified Paper' if strip_ok else '❌ Rejected'}
+                                {strip_text}
                             </strong>
                         </div>
                         """,
@@ -683,12 +696,13 @@ elif page == "Scan Strip":
                     )
 
                 with ind_col3:
+                    hum_text = '✅ Auto 50% Standard' if is_standalone_strip else ('✅ Card Detected' if (humidity_input_mode.startswith('🤖') and hum_ok) else ('✅ Manual Set' if hum_ok else '❌ Not Available'))
                     st.markdown(
                         f"""
                         <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid {'#10B981' if hum_ok else '#EF4444'}; padding: 0.65rem 0.8rem; border-radius: 0.4rem;">
                             <div style="font-size: 0.76rem; color: #CBD5E1; font-weight: 600;">💧 Humidity Source</div>
                             <strong style="color: {'#4ADE80' if hum_ok else '#F87171'}; font-size: 0.85rem;">
-                                {'✅ Card Detected' if (humidity_input_mode.startswith('🤖') and hum_ok) else ('✅ Manual Set' if hum_ok else '❌ Not Available')}
+                                {hum_text}
                             </strong>
                         </div>
                         """,
@@ -696,12 +710,13 @@ elif page == "Scan Strip":
                     )
 
                 with ind_col4:
+                    calib_text = '✅ Feasible (Direct Pixel)' if is_standalone_strip else ('✅ Feasible (OLS)' if calib_ok else '❌ Infeasible')
                     st.markdown(
                         f"""
                         <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 3px solid {'#10B981' if calib_ok else '#EF4444'}; padding: 0.65rem 0.8rem; border-radius: 0.4rem;">
                             <div style="font-size: 0.76rem; color: #CBD5E1; font-weight: 600;">💡 Lighting Calibration</div>
                             <strong style="color: {'#4ADE80' if calib_ok else '#F87171'}; font-size: 0.85rem;">
-                                {'✅ Feasible (OLS)' if calib_ok else '❌ Infeasible'}
+                                {calib_text}
                             </strong>
                         </div>
                         """,
@@ -730,11 +745,11 @@ elif page == "Scan Strip":
             if not is_worker_id_valid:
                 st.caption("🔒 *Analysis blocked: Worker badge is expired, inactive, or unverified. Please resolve worker credentials above.*")
             elif not is_strip_valid:
-                st.caption("🔒 *Analysis disabled: Please position a valid DoseBand H₂S dosimeter badge with clear optical reference scale in view.*")
+                st.caption("🔒 *Analysis disabled: Please position a valid DoseBand H₂S dosimeter strip with clear chemical paper in view.*")
             elif not is_quality_valid:
                 st.caption("🔒 *Analysis disabled: Please resolve image blur/lighting quality issues indicated above (Retake Required).*")
             elif not rois_detected:
-                st.caption("🔒 *Analysis disabled: Required sensor regions (H₂S strip, reference scale, or humidity card) could not be detected.*")
+                st.caption("🔒 *Analysis disabled: Required chemical test strip region could not be detected.*")
             elif not env_params_valid:
                 st.caption("🔒 *Analysis disabled: Please provide valid shift duration and environmental parameters.*")
 
@@ -759,10 +774,14 @@ elif page == "Scan Strip":
                     st.error(f"🚨 **Analysis Blocked:** {inf_res.get('user_message', 'Validation failed.')}")
                     st.stop()
 
-                # Optical expiry patch check
-                expiry_res = expiry_checker.check_badge_validity(preview_bgr)
-                is_optical_expired = expiry_res.get("is_expired", False)
-                expiry_status_msg = expiry_res.get("status_message", "")
+                # Optical expiry patch check (only for full badges that contain the expiry patch)
+                if is_standalone_strip:
+                    is_optical_expired = False
+                    expiry_status_msg = "Physical Chemical Test Strip (Active)"
+                else:
+                    expiry_res = expiry_checker.check_badge_validity(preview_bgr)
+                    is_optical_expired = expiry_res.get("is_expired", False)
+                    expiry_status_msg = expiry_res.get("status_message", "")
 
                 # Unified Badge Validity Gate (Profile Active/Unexpired AND Optical Patch Unexpired)
                 is_badge_fully_valid = is_worker_id_valid and not is_optical_expired
