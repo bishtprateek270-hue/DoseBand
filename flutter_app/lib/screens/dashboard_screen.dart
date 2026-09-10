@@ -5,7 +5,7 @@ import '../theme/app_theme.dart';
 import 'worker_detail_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({Key? key}) : super(key: key);
+  const DashboardScreen({super.key});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -44,139 +44,178 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Color _getRiskBgColor(String riskLevel) {
+    switch (riskLevel) {
+      case 'Safe':
+        return AppTheme.safeGreenBg;
+      case 'Caution':
+        return AppTheme.cautionYellowBg;
+      case 'Unsafe':
+        return AppTheme.unsafeRedBg;
+      default:
+        return AppTheme.safeGreenBg;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final workers = _workerService.workers;
     if (workers.isEmpty) {
-      return const Scaffold(body: Center(child: Text('No workers registered.')));
+      return const Scaffold(
+        body: Center(
+          child: Text('No active workers registered in system.', style: TextStyle(fontWeight: FontWeight.w600)),
+        ),
+      );
     }
 
     final activeWorker = _workerService.getWorkerById(_selectedWorkerId) ?? workers.first;
     const double unsafeThreshold = 50.0;
     final double progress = (activeWorker.cumulativeDose / unsafeThreshold).clamp(0.0, 1.0);
     final riskColor = _getRiskColor(activeWorker.riskLevel);
+    final riskBg = _getRiskBgColor(activeWorker.riskLevel);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top Header & Worker Selector
+          // Top Header & Worker Selector (Wrapped to prevent overflow)
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Worker Monitoring Dashboard',
-                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(fontSize: 22),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Real-time H₂S Dosimetry & Safety Compliance',
-                    style: TextStyle(color: AppTheme.primaryNavyLight, fontSize: 13),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Overview',
+                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(fontSize: 22, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Real-Time H₂S Exposure Roster',
+                      style: TextStyle(color: AppTheme.primaryNavyLight, fontSize: 12, fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-              DropdownButtonHideUnderline(
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 130),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: AppTheme.borderColor),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2)),
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6, offset: const Offset(0, 2)),
                     ],
                   ),
-                  child: DropdownButton<String>(
-                    value: workers.any((w) => w.workerId == _selectedWorkerId) ? _selectedWorkerId : workers.first.workerId,
-                    items: workers.map((w) {
-                      return DropdownMenuItem<String>(
-                        value: w.workerId,
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: _getRiskColor(w.riskLevel),
-                                shape: BoxShape.circle,
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: workers.any((w) => w.workerId == _selectedWorkerId) ? _selectedWorkerId : workers.first.workerId,
+                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryNavy, size: 20),
+                      items: workers.map((w) {
+                        return DropdownMenuItem<String>(
+                          value: w.workerId,
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: _getRiskColor(w.riskLevel),
+                                  shape: BoxShape.circle,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${w.workerId} (${w.name.split(' ').first})',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) setState(() => _selectedWorkerId = val);
-                    },
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  w.workerId,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryNavy),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedWorkerId = val);
+                      },
+                    ),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 18),
 
-          // Overview Stats Row
+          // Overview Summary Cards Row
           Row(
             children: [
               Expanded(
                 child: _buildSummaryCard(
-                  title: 'Active Roster',
+                  title: 'ACTIVE ROSTER',
                   value: '${_workerService.workers.length}',
                   subtext: '${_workerService.activeWorkersCount} On Shift',
                   icon: Icons.people_alt_outlined,
-                  color: AppTheme.primaryNavy,
+                  accentColor: AppTheme.accentIndigo,
+                  bgColor: AppTheme.accentIndigo.withValues(alpha: 0.08),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: _buildSummaryCard(
-                  title: 'High Exposure',
+                  title: 'EXPOSURE RISK',
                   value: '${_workerService.unsafeWorkersCount}',
-                  subtext: 'Requires Hold',
+                  subtext: _workerService.unsafeWorkersCount > 0 ? 'Requires Action' : 'All Clear',
                   icon: Icons.warning_amber_rounded,
-                  color: AppTheme.unsafeRed,
+                  accentColor: _workerService.unsafeWorkersCount > 0 ? AppTheme.unsafeRed : AppTheme.safeGreen,
+                  bgColor: (_workerService.unsafeWorkersCount > 0 ? AppTheme.unsafeRed : AppTheme.safeGreen).withValues(alpha: 0.08),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 18),
 
-          // Active Risk Banner
+          // Active Risk Banner (If unsafe)
           if (activeWorker.riskLevel == 'Unsafe' || activeWorker.cumulativeDose >= unsafeThreshold)
             Container(
-              margin: const EdgeInsets.only(bottom: 24),
-              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 18),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppTheme.unsafeRed.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppTheme.unsafeRed),
+                color: AppTheme.unsafeRedBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.unsafeRed.withValues(alpha: 0.4)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.dangerous, color: AppTheme.unsafeRed, size: 32),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.unsafeRed.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.error_outline_rounded, color: AppTheme.unsafeRed, size: 24),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'CRITICAL ALERT: ${activeWorker.name} (${activeWorker.workerId})',
-                          style: const TextStyle(color: AppTheme.unsafeRed, fontWeight: FontWeight.bold, fontSize: 14),
+                          'CRITICAL EXPOSURE: ${activeWorker.name} (${activeWorker.workerId})',
+                          style: const TextStyle(color: AppTheme.unsafeRed, fontWeight: FontWeight.w800, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
                         const Text(
-                          'Worker has reached or exceeded 50.0 ppm*hr cumulative limit. Initiate immediate medical check.',
-                          style: TextStyle(fontSize: 12),
+                          'Dose exceeded 50.0 ppm*hr threshold. Mandatory hold & safety evaluation required.',
+                          style: TextStyle(fontSize: 11, color: AppTheme.primaryNavy),
                         ),
                       ],
                     ),
@@ -185,151 +224,214 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
 
-          // Active Worker Status Card
+          // Hero Active Worker Status Card
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: riskColor.withValues(alpha: 0.3), width: 1.2),
               boxShadow: [
                 BoxShadow(
-                  color: riskColor.withOpacity(0.12),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
+                  color: riskColor.withValues(alpha: 0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
                 ),
               ],
-              border: Border.all(color: riskColor.withOpacity(0.3), width: 1.5),
             ),
             child: Column(
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Worker ${activeWorker.workerId} • ${activeWorker.name}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.primaryNavy),
-                        ),
-                        Text(
-                          '${activeWorker.department} | ${activeWorker.shift}',
-                          style: const TextStyle(fontSize: 12, color: AppTheme.primaryNavyLight),
-                        ),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            activeWorker.name,
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: AppTheme.primaryNavy, letterSpacing: -0.3),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'ID: ${activeWorker.workerId}  •  ${activeWorker.department}',
+                            style: const TextStyle(fontSize: 12, color: AppTheme.primaryNavyLight, fontWeight: FontWeight.w500),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: riskColor.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(20),
+                        color: riskBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: riskColor.withValues(alpha: 0.3), width: 0.8),
                       ),
                       child: Text(
                         activeWorker.riskLevel.toUpperCase(),
                         style: TextStyle(
                           color: riskColor,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 22),
+
+                // Radial Exposure Gauge
                 Stack(
                   alignment: Alignment.center,
                   children: [
                     SizedBox(
-                      height: 160,
-                      width: 160,
+                      height: 150,
+                      width: 150,
                       child: CircularProgressIndicator(
                         value: progress,
-                        backgroundColor: AppTheme.borderColor,
+                        backgroundColor: AppTheme.borderColor.withValues(alpha: 0.6),
                         color: riskColor,
-                        strokeWidth: 12,
+                        strokeWidth: 14,
                         strokeCap: StrokeCap.round,
                       ),
                     ),
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          activeWorker.cumulativeDose.toStringAsFixed(1),
-                          style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                            color: riskColor,
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            activeWorker.cumulativeDose.toStringAsFixed(1),
+                            style: TextStyle(
+                              fontSize: 34,
+                              fontWeight: FontWeight.w900,
+                              color: riskColor,
+                              letterSpacing: -1.0,
+                            ),
                           ),
                         ),
                         const Text(
-                          'ppm*hr',
-                          style: TextStyle(color: AppTheme.primaryNavyLight, fontWeight: FontWeight.w500),
+                          'ppm • hr',
+                          style: TextStyle(color: AppTheme.primaryNavyLight, fontWeight: FontWeight.w700, fontSize: 11),
                         ),
                       ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                Text(
-                  'Safety Limit: ${unsafeThreshold.toStringAsFixed(1)} ppm*hr',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.primaryNavyLight, fontWeight: FontWeight.w500),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.shield_outlined, size: 14, color: AppTheme.primaryNavyLight),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Safe Threshold: ${unsafeThreshold.toStringAsFixed(0)} ppm*hr',
+                      style: const TextStyle(fontSize: 11, color: AppTheme.primaryNavyLight, fontWeight: FontWeight.w600),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    side: const BorderSide(color: AppTheme.safetyOrange),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppTheme.borderColor),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => WorkerDetailScreen(workerId: activeWorker.workerId),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.person_outline_rounded, color: AppTheme.primaryNavy, size: 18),
+                    label: const Text(
+                      'View Detailed Worker Profile',
+                      style: TextStyle(color: AppTheme.primaryNavy, fontWeight: FontWeight.w700, fontSize: 13),
+                    ),
                   ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => WorkerDetailScreen(workerId: activeWorker.workerId),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.person_outline, color: AppTheme.safetyOrange),
-                  label: const Text('View Full Worker Profile', style: TextStyle(color: AppTheme.safetyOrange, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 36),
+          const SizedBox(height: 24),
 
-          // Weekly Exposure Trend Chart
-          Text(
-            'Weekly Cumulative Exposure Trend',
-            style: Theme.of(context).textTheme.titleLarge,
+          // Weekly Exposure Trend Section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              Text(
+                'Weekly Dosimeter Trend',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.primaryNavy, letterSpacing: -0.2),
+              ),
+              Text(
+                '7-Day Average',
+                style: TextStyle(fontSize: 11, color: AppTheme.primaryNavyLight, fontWeight: FontWeight.w600),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
           Container(
-            height: 220,
-            padding: const EdgeInsets.only(top: 24, right: 24, left: 12, bottom: 12),
+            height: 210,
+            padding: const EdgeInsets.only(top: 20, right: 20, left: 8, bottom: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppTheme.borderColor),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 8, offset: const Offset(0, 2)),
+              ],
             ),
             child: LineChart(
               LineChartData(
-                gridData: const FlGridData(show: false),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: AppTheme.borderColor.withValues(alpha: 0.5),
+                    strokeWidth: 0.8,
+                  ),
+                ),
                 titlesData: FlTitlesData(
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      reservedSize: 24,
                       getTitlesWidget: (value, meta) {
                         const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                         if (value.toInt() >= 0 && value.toInt() < days.length) {
                           return Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
+                            padding: const EdgeInsets.only(top: 6.0),
                             child: Text(
                               days[value.toInt()],
-                              style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 11, fontWeight: FontWeight.w500),
+                              style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 11, fontWeight: FontWeight.w600),
                             ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 30,
+                      getTitlesWidget: (value, meta) {
+                        if (value % 15 == 0) {
+                          return Text(
+                            '${value.toInt()}',
+                            style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 10, fontWeight: FontWeight.w500),
                           );
                         }
                         return const SizedBox.shrink();
@@ -347,15 +449,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       FlSpot(3, 22.1),
                       FlSpot(4, 34.5),
                       FlSpot(5, 42.0),
+                      FlSpot(6, 44.5),
                     ],
                     isCurved: true,
-                    color: AppTheme.safetyOrange,
-                    barWidth: 3.5,
+                    color: AppTheme.accentIndigo,
+                    barWidth: 3,
                     isStrokeCapRound: true,
-                    dotData: const FlDotData(show: true),
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                        radius: 4,
+                        color: Colors.white,
+                        strokeWidth: 2.5,
+                        strokeColor: AppTheme.accentIndigo,
+                      ),
+                    ),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: AppTheme.safetyOrange.withOpacity(0.1),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          AppTheme.accentIndigo.withValues(alpha: 0.25),
+                          AppTheme.accentIndigo.withValues(alpha: 0.0),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -366,6 +484,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -376,14 +495,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String value,
     required String subtext,
     required IconData icon,
-    required Color color,
+    required Color accentColor,
+    required Color bgColor,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.borderColor),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 6, offset: const Offset(0, 2)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -391,14 +514,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(fontSize: 12, color: AppTheme.primaryNavyLight)),
-              Icon(icon, color: color, size: 22),
+              Flexible(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppTheme.primaryNavyLight, letterSpacing: 0.5),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: accentColor, size: 16),
+              ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 4),
-          Text(subtext, style: const TextStyle(fontSize: 11, color: AppTheme.primaryNavyLight)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: accentColor, letterSpacing: -0.5),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtext,
+            style: const TextStyle(fontSize: 11, color: AppTheme.primaryNavyLight, fontWeight: FontWeight.w500),
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
