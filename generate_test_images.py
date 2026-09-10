@@ -215,7 +215,20 @@ def generate_all_test_assets() -> None:
         ("exposure_shade_06_slate_grey.jpg",     (128, 122, 116), (192, 157, 183)), # ~37.5 ppm (Slate Grey)
         ("exposure_shade_07_dark_grey.jpg",      (98, 93, 88),    (192, 157, 183)), # ~51.5 ppm (Dark Grey)
         ("exposure_shade_08_charcoal_grey.jpg",  (68, 65, 62),    (215, 141, 159)), # ~66.5 ppm (Charcoal Grey)
-        ("exposure_shade_09_deep_black.jpg",     (42, 40, 40),    (215, 141, 159))  # ~80.5 ppm (Deep Black)
+        ("exposure_shade_09_deep_black.jpg",     (42, 40, 40),    (215, 141, 159)), # ~80.5 ppm (Deep Black)
+
+        # Real Physical Test Strip Swatches (From Industrial Laboratory Lead Acetate Badges)
+        ("real_strip_01_fresh_cream.jpg",        (203, 200, 179), (146, 154, 196)), # ~8.5 ppm (Fresh Cream / Ivory)
+        ("real_strip_02_light_beige_tan.jpg",    (182, 180, 163), (140, 178, 213)), # ~15.0 ppm (Beige Tan)
+        ("real_strip_03_medium_greyish_tan.jpg", (160, 155, 146), (146, 154, 196)), # ~24.0 ppm (Greyish Tan)
+        ("real_strip_04_warm_brownish_grey.jpg", (133, 123, 110), (146, 154, 196)), # ~38.0 ppm (Brownish Grey)
+        ("real_strip_05_dark_bronze_grey.jpg",   (92, 82, 71),    (192, 157, 183)), # ~58.0 ppm (Dark Bronze)
+        ("real_strip_06_charcoal_slate.jpg",     (65, 63, 59),    (192, 157, 183)), # ~68.0 ppm (Charcoal Slate)
+        ("real_strip_07_dense_charcoal_black.jpg",(35, 35, 35),   (215, 141, 159)), # ~82.0 ppm (Charcoal Black)
+        ("real_strip_08_deep_solid_black.jpg",   (23, 25, 29),    (215, 141, 159)), # ~85.0 ppm (Deep Solid Black)
+        ("real_strip_09_mottled_light.jpg",      (186, 182, 173), (140, 178, 213)), # ~14.0 ppm (Mottled Light)
+        ("real_strip_10_mottled_medium.jpg",     (116, 107, 94),  (192, 157, 183)), # ~46.0 ppm (Mottled Medium)
+        ("real_strip_11_mottled_heavy_black.jpg",(51, 49, 44),    (215, 141, 159))  # ~78.0 ppm (Mottled Heavy)
     ]
 
     for filename, h2s_rgb, hum_rgb in exposure_levels:

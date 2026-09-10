@@ -55,13 +55,16 @@ def extract_h2s_dataset(
     # Dense sampling of 120 grayscale levels across the entire spectrum (25 to 252)
     gray_levels = np.linspace(25.0, 252.0, 120)
 
-    # Lead acetate / Lead sulfide optical variations (neutral gray, warm PbS tint, subtle cool)
+    # Lead acetate / Lead sulfide optical variations (neutral gray, warm cream, tan, PbS bronze, charcoal)
     optical_variations = [
         (0.0, 0.0, 0.0),       # Pure neutral grayscale
-        (3.5, 1.5, -2.0),      # Typical warm PbS brownish-gray tint
-        (2.0, 0.5, -1.5),      # Subtle warm tint
-        (-1.5, -0.5, 1.0),     # Slightly cool lighting variation
-        (1.0, 1.0, 1.0)        # Slight diffuse reflection
+        (4.0, 2.0, -12.0),     # Natural cream / ivory unexposed cellulose paper
+        (8.0, 4.0, -18.0),     # Warm cream / yellowish-tan fresh paper
+        (6.0, 2.0, -8.0),      # Typical warm PbS brownish-gray tint
+        (10.0, 5.0, -15.0),    # Warm tan / beige exposure
+        (7.0, 2.0, -6.0),      # Dark bronze / umber tint
+        (-2.0, -1.0, 2.0),     # Cool slate gray
+        (1.0, 1.0, 1.0)        # Diffuse white reflection
     ]
 
     for g in gray_levels:

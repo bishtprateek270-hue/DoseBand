@@ -73,7 +73,18 @@ test_images_to_run = [
     'exposure_level_2_low.jpg',
     'exposure_level_3_medium.jpg',
     'exposure_level_4_high.jpg',
-    'exposure_level_5_very_high.jpg'
+    'exposure_level_5_very_high.jpg',
+    'real_strip_01_fresh_cream.jpg',
+    'real_strip_02_light_beige_tan.jpg',
+    'real_strip_03_medium_greyish_tan.jpg',
+    'real_strip_04_warm_brownish_grey.jpg',
+    'real_strip_05_dark_bronze_grey.jpg',
+    'real_strip_06_charcoal_slate.jpg',
+    'real_strip_07_dense_charcoal_black.jpg',
+    'real_strip_08_deep_solid_black.jpg',
+    'real_strip_09_mottled_light.jpg',
+    'real_strip_10_mottled_medium.jpg',
+    'real_strip_11_mottled_heavy_black.jpg'
 ]
 
 for img_name in test_images_to_run:
