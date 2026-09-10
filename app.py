@@ -526,6 +526,7 @@ elif page == "Scan Strip":
         manual_humidity = None
 
     with col2:
+        st.subheader("Step 3: Badge Preview & Verification")
         is_quality_valid = False
         is_strip_valid = False
         rois_detected = False
@@ -737,176 +738,180 @@ elif page == "Scan Strip":
             elif not env_params_valid:
                 st.caption("🔒 *Analysis disabled: Please provide valid shift duration and environmental parameters.*")
 
-        if analyze_clicked and prediction_allowed and image_bytes_to_process is not None and preview_bgr is not None:
-            with st.spinner("Executing multi-ROI lighting compensation, Humidity KNN & H2S RandomForest inference..."):
-                try:
-                    pipeline = inference_engine.get_inference_pipeline()
-                    inf_res = pipeline.run_full_inference(
-                        image_bgr=preview_bgr,
-                        temperature_c=ambient_temp,
-                        exposure_time_h=exposure_time,
-                        manual_humidity_override=manual_humidity
+    # -------------------------------------------------------------------------
+    # FULL-WIDTH ANALYSIS & DOSIMETRY RESULTS SECTION
+    # -------------------------------------------------------------------------
+    if analyze_clicked and prediction_allowed and image_bytes_to_process is not None and preview_bgr is not None:
+        st.divider()
+        st.markdown("<h3 class='section-header'>📊 Gas Dosimetry & Worker Exposure Results</h3>", unsafe_allow_html=True)
+
+        with st.spinner("Executing multi-ROI lighting compensation, Humidity KNN & H2S inference..."):
+            try:
+                pipeline = inference_engine.get_inference_pipeline()
+                inf_res = pipeline.run_full_inference(
+                    image_bgr=preview_bgr,
+                    temperature_c=ambient_temp,
+                    exposure_time_h=exposure_time,
+                    manual_humidity_override=manual_humidity
+                )
+
+                if not inf_res.get("is_valid", False):
+                    st.error(f"🚨 **Analysis Blocked:** {inf_res.get('user_message', 'Validation failed.')}")
+                    st.stop()
+
+                # Optical expiry patch check
+                expiry_res = expiry_checker.check_badge_validity(preview_bgr)
+                is_optical_expired = expiry_res.get("is_expired", False)
+                expiry_status_msg = expiry_res.get("status_message", "")
+
+                # Unified Badge Validity Gate (Profile Active/Unexpired AND Optical Patch Unexpired)
+                is_badge_fully_valid = is_worker_id_valid and not is_optical_expired
+
+                if not is_badge_fully_valid:
+                    # Expired or invalid badge -> Strictly BLOCK saving and classification
+                    st.error("🚨 **Badge Invalid / Expired:** Badge invalid/expired — replace badge before recording exposure.")
+                    st.warning("⚠️ **DIAGNOSTIC PREVIEW ONLY — EXPOSURE NOT SAVED TO DATABASE.** "
+                               "This badge is expired or inactive. Cumulative exposure, worker history, and compliance records have NOT been updated.")
+
+                    # Expiry Status Banner
+                    st.error(f"❌ **Badge Expiry Status:** {expiry_status_msg}")
+
+                    # Diagnostic-only metrics grid
+                    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+                    with m_col1:
+                        st.metric(
+                            "Estimated H₂S Gas (Preview)",
+                            f"{inf_res['estimated_h2s_ppm']:.2f} ppm",
+                            help="Diagnostic preview only. Not recorded to worker history."
+                        )
+                    with m_col2:
+                        st.metric(
+                            "Relative Humidity",
+                            f"{inf_res['predicted_humidity']:.1f}% RH",
+                            help=f"Source: {inf_res['humidity_source']}"
+                        )
+                    with m_col3:
+                        st.metric(
+                            "Cumulative Exposure",
+                            "Not Recorded",
+                            delta="BLOCKED (EXPIRED)",
+                            delta_color="inverse",
+                            help="Exposure logging is strictly blocked for expired badges."
+                        )
+                    with m_col4:
+                        st.metric(
+                            "Badge Status",
+                            "EXPIRED / BLOCKED",
+                            delta="Replace Badge",
+                            delta_color="inverse",
+                            help="Replace badge with active dosimeter."
+                        )
+
+                else:
+                    # VALID BADGE -> Save to SQLite database with session-state deduplication
+                    import hashlib
+                    raw_img_sha = hashlib.sha256(image_bytes_to_process).hexdigest()
+                    current_scan_hash = hashlib.sha256(
+                        f"{worker_id_clean}_{raw_img_sha}_{ambient_temp:.1f}_{exposure_time:.2f}_{manual_humidity}_{inf_res['estimated_h2s_ppm']:.2f}".encode()
+                    ).hexdigest()
+
+                    if st.session_state.get("last_saved_scan_hash") != current_scan_hash:
+                        record_id = database.insert_reading(
+                            worker_id=worker_id_clean,
+                            intensity=inf_res["staining_intensity"],
+                            dose=inf_res["cumulative_dose_ppm_h"],
+                            risk_level=inf_res["risk_level"],
+                            is_expired=False,
+                            expiry_status_message=expiry_status_msg,
+                            temperature=ambient_temp,
+                            humidity=inf_res["predicted_humidity"],
+                            raw_intensity=inf_res["staining_intensity"],
+                            corrected_intensity=inf_res["staining_intensity"],
+                            compensation_factor=1.0,
+                            predicted_humidity=inf_res["predicted_humidity"],
+                            exposure_time=exposure_time,
+                            strip_intensity=inf_res["staining_intensity"],
+                            estimated_h2s_ppm=inf_res["estimated_h2s_ppm"],
+                            data_source="SIMULATED_REFERENCE_IMAGE_MODEL"
+                        )
+                        st.session_state["last_saved_scan_hash"] = current_scan_hash
+                        st.session_state["last_saved_record_id"] = record_id
+                    else:
+                        record_id = st.session_state.get("last_saved_record_id", "Logged")
+
+                    cumulative_dose = database.get_cumulative_dose(worker_id_clean)
+
+                    st.success(f"✅ **Analysis Complete & Logged!** Record ID `#{record_id}` saved against Worker `{worker_id_clean}`.")
+
+                    # Primary Metrics Grid - Full Width 4 Columns
+                    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+                    with m_col1:
+                        st.metric(
+                            "Estimated H₂S Gas",
+                            f"{inf_res['estimated_h2s_ppm']:.2f} ppm",
+                            help="Predicted by trained reference model using corrected strip RGB/HSV/intensity"
+                        )
+                    with m_col2:
+                        st.metric(
+                            "Relative Humidity",
+                            f"{inf_res['predicted_humidity']:.1f}% RH",
+                            help=f"Source: {inf_res['humidity_source']} (Clamped: 20–90% RH)"
+                        )
+                    with m_col3:
+                        st.metric(
+                            "Shift Cumulative Exposure",
+                            f"{inf_res['cumulative_dose_ppm_h']:.2f} ppm·h",
+                            delta=f"Total: {cumulative_dose:.2f} ppm·h",
+                            help="Shift dose (estimated ppm × hours) and total worker cumulative exposure"
+                        )
+                    with m_col4:
+                        rel_label = inf_res.get("reliability_label", "High Reliability")
+                        conf_val = inf_res.get("confidence_pct", 95)
+                        st.metric(
+                            "Prediction Reliability",
+                            f"{conf_val}%",
+                            delta=rel_label,
+                            delta_color="normal" if conf_val >= 80 else "inverse",
+                            help="Composite score: Test-strip validation + multi-ROI detection + lighting calibration"
+                        )
+
+                    # Environmental & Reliability Context Line - Full Width
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #1E293B; color: #F1F5F9; border: 1px solid #334155; border-left: 3px solid #38BDF8; padding: 0.65rem 1rem; border-radius: 0.4rem; font-size: 0.86rem; margin-top: 0.75rem; margin-bottom: 0.75rem;">
+                            👤 <b style="color: #FFFFFF;">Worker:</b> <code style="color: #38BDF8; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{worker_id_clean}</code> &nbsp;|&nbsp; 
+                            🌡️ <b style="color: #FFFFFF;">Ambient Temp:</b> <code style="color: #38BDF8; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{ambient_temp:.1f} °C</code> &nbsp;|&nbsp; 
+                            ⏱️ <b style="color: #FFFFFF;">Shift Duration:</b> <code style="color: #FBBF24; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{exposure_time:.1f} hrs</code> &nbsp;|&nbsp; 
+                            💧 <b style="color: #FFFFFF;">Humidity Source:</b> <code style="color: #34D399; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{inf_res['humidity_source']}</code> &nbsp;|&nbsp; 
+                            🛡️ <b style="color: #FFFFFF;">Scan Confidence:</b> <code style="color: #C084FC; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{inf_res.get('reliability_label', 'High Reliability')} ({inf_res.get('confidence_pct', 95)}%)</code>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
                     )
 
-                    if not inf_res.get("is_valid", False):
-                        st.error(f"🚨 **Analysis Blocked:** {inf_res.get('user_message', 'Validation failed.')}")
-                        st.stop()
-
-                    # Optical expiry patch check
-                    expiry_res = expiry_checker.check_badge_validity(preview_bgr)
-                    is_optical_expired = expiry_res.get("is_expired", False)
-                    expiry_status_msg = expiry_res.get("status_message", "")
-
-                    # Unified Badge Validity Gate (Profile Active/Unexpired AND Optical Patch Unexpired)
-                    is_badge_fully_valid = is_worker_id_valid and not is_optical_expired
-
-                    if not is_badge_fully_valid:
-                        # Expired or invalid badge -> Strictly BLOCK saving and classification
-                        st.error("🚨 **Badge Invalid / Expired:** Badge invalid/expired — replace badge before recording exposure.")
-                        st.warning("⚠️ **DIAGNOSTIC PREVIEW ONLY — EXPOSURE NOT SAVED TO DATABASE.** "
-                                   "This badge is expired or inactive. Cumulative exposure, worker history, and compliance records have NOT been updated.")
-
-                        # Expiry Status Banner
-                        st.error(f"❌ **Badge Expiry Status:** {expiry_status_msg}")
-
-                        # Diagnostic-only metrics grid
-                        m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-                        with m_col1:
-                            st.metric(
-                                "Estimated H₂S Gas (Preview)",
-                                f"{inf_res['estimated_h2s_ppm']:.2f} ppm",
-                                help="Diagnostic preview only. Not recorded to worker history."
-                            )
-                        with m_col2:
-                            st.metric(
-                                "Relative Humidity",
-                                f"{inf_res['predicted_humidity']:.1f}% RH",
-                                help=f"Source: {inf_res['humidity_source']}"
-                            )
-                        with m_col3:
-                            st.metric(
-                                "Cumulative Exposure",
-                                "Not Recorded",
-                                delta="BLOCKED (EXPIRED)",
-                                delta_color="inverse",
-                                help="Exposure logging is strictly blocked for expired badges."
-                            )
-                        with m_col4:
-                            st.metric(
-                                "Badge Status",
-                                "EXPIRED / BLOCKED",
-                                delta="Replace Badge",
-                                delta_color="inverse",
-                                help="Replace badge with active dosimeter."
-                            )
-
-                    else:
-                        # VALID BADGE -> Save to SQLite database with session-state deduplication
-                        import hashlib
-                        raw_img_sha = hashlib.sha256(image_bytes_to_process).hexdigest()
-                        current_scan_hash = hashlib.sha256(
-                            f"{worker_id_clean}_{raw_img_sha}_{ambient_temp:.1f}_{exposure_time:.2f}_{manual_humidity}_{inf_res['estimated_h2s_ppm']:.2f}".encode()
-                        ).hexdigest()
-
-                        if st.session_state.get("last_saved_scan_hash") != current_scan_hash:
-                            record_id = database.insert_reading(
-                                worker_id=worker_id_clean,
-                                intensity=inf_res["staining_intensity"],
-                                dose=inf_res["cumulative_dose_ppm_h"],
-                                risk_level=inf_res["risk_level"],
-                                is_expired=False,
-                                expiry_status_message=expiry_status_msg,
-                                temperature=ambient_temp,
-                                humidity=inf_res["predicted_humidity"],
-                                raw_intensity=inf_res["staining_intensity"],
-                                corrected_intensity=inf_res["staining_intensity"],
-                                compensation_factor=1.0,
-                                predicted_humidity=inf_res["predicted_humidity"],
-                                exposure_time=exposure_time,
-                                strip_intensity=inf_res["staining_intensity"],
-                                estimated_h2s_ppm=inf_res["estimated_h2s_ppm"],
-                                data_source="SIMULATED_REFERENCE_IMAGE_MODEL"
-                            )
-                            st.session_state["last_saved_scan_hash"] = current_scan_hash
-                            st.session_state["last_saved_record_id"] = record_id
-                        else:
-                            record_id = st.session_state.get("last_saved_record_id", "Logged")
-
-                        cumulative_dose = database.get_cumulative_dose(worker_id_clean)
-
-                        st.success(f"✅ **Analysis Complete & Logged!** Record ID `#{record_id}` saved against Worker `{worker_id_clean}`.")
-
-                        # Primary Metrics Grid
-                        m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-                        with m_col1:
-                            st.metric(
-                                "Estimated H₂S Gas",
-                                f"{inf_res['estimated_h2s_ppm']:.2f} ppm",
-                                help="Predicted by trained reference model using corrected strip RGB/HSV/intensity + temperature + humidity + exposure time"
-                            )
-                        with m_col2:
-                            st.metric(
-                                "Relative Humidity",
-                                f"{inf_res['predicted_humidity']:.1f}% RH",
-                                help=f"Source: {inf_res['humidity_source']} (Clamped: 20–90% RH)"
-                            )
-                        with m_col3:
-                            st.metric(
-                                "Cumulative Exposure",
-                                f"{inf_res['cumulative_dose_ppm_h']:.2f} ppm·h",
-                                delta=f"Total: {cumulative_dose:.2f} ppm·h",
-                                help="Shift dose (estimated ppm × hours) and total worker cumulative exposure"
-                            )
-                        with m_col4:
-                            rel_label = inf_res.get("reliability_label", "High Reliability")
-                            conf_val = inf_res.get("confidence_pct", 95)
-                            st.metric(
-                                "Prediction Reliability",
-                                f"{conf_val}%",
-                                delta=rel_label,
-                                delta_color="normal" if conf_val >= 80 else "inverse",
-                                help="Composite score: Test-strip validation + multi-ROI detection + lighting calibration"
-                            )
-
-                        # Environmental & Reliability Context Line
-                        st.markdown(
-                            f"""
-                            <div style="background-color: #1E293B; color: #F1F5F9; border: 1px solid #334155; border-left: 3px solid #38BDF8; padding: 0.6rem 0.9rem; border-radius: 0.4rem; font-size: 0.84rem; margin-top: 0.6rem; margin-bottom: 0.75rem;">
-                                🌡️ <b style="color: #FFFFFF;">Ambient Temp:</b> <code style="color: #38BDF8; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{ambient_temp:.1f} °C</code> &nbsp;|&nbsp; 
-                                ⏱️ <b style="color: #FFFFFF;">Shift Duration:</b> <code style="color: #FBBF24; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{exposure_time:.1f} hrs</code> &nbsp;|&nbsp; 
-                                💧 <b style="color: #FFFFFF;">Humidity Source:</b> <code style="color: #34D399; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{inf_res['humidity_source']}</code> &nbsp;|&nbsp; 
-                                🛡️ <b style="color: #FFFFFF;">Scan Confidence:</b> <code style="color: #C084FC; background-color: #0F172A; padding: 2px 6px; border-radius: 4px;">{inf_res.get('reliability_label', 'High Reliability')} ({inf_res.get('confidence_pct', 95)}%)</code>
+                    # Risk Level Banner - Full Width
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 4px solid {inf_res['risk_color']}; padding: 0.9rem 1.1rem; border-radius: 0.5rem; margin-top: 0.75rem; margin-bottom: 0.75rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <strong style="color: #FFFFFF; font-size: 1.05rem;">🛡️ Risk Classification: <span style="color: {inf_res['risk_color']}; font-weight: 800;">{inf_res['risk_level']}</span></strong>
+                                <span style="background-color: {inf_res['risk_color']}; color: #FFFFFF; font-size: 0.78rem; font-weight: 800; padding: 4px 14px; border-radius: 4px; letter-spacing: 0.05em;">
+                                    {inf_res['risk_level'].upper()}
+                                </span>
                             </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
+                            <p style="font-size: 0.88rem; color: #F1F5F9; margin-top: 0.45rem; margin-bottom: 0; line-height: 1.45;">
+                                📋 <b style="color: #FFFFFF;">Action Guidance:</b> {inf_res['action_guidance']}
+                            </p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
-                        # Risk Level Banner (Evaluated only after valid prediction on unexpired badge)
-                        st.markdown(
-                            f"""
-                            <div style="background-color: #1E293B; border: 1px solid #334155; border-left: 4px solid {inf_res['risk_color']}; padding: 0.85rem 1rem; border-radius: 0.5rem; margin-top: 0.75rem; margin-bottom: 0.75rem;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <strong style="color: #FFFFFF; font-size: 1rem;">🛡️ Risk Classification: <span style="color: {inf_res['risk_color']}; font-weight: 800;">{inf_res['risk_level']}</span></strong>
-                                    <span style="background-color: {inf_res['risk_color']}; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 4px 12px; border-radius: 4px; letter-spacing: 0.05em;">
-                                        {inf_res['risk_level'].upper()}
-                                    </span>
-                                </div>
-                                <p style="font-size: 0.85rem; color: #F1F5F9; margin-top: 0.4rem; margin-bottom: 0; line-height: 1.4;">
-                                    📋 <b style="color: #FFFFFF;">Action Guidance:</b> {inf_res['action_guidance']}
-                                </p>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
+                    # Expiry Status Banner
+                    st.info(f"✅ **Badge Expiry Status:** {expiry_status_msg}")
 
-                        # Expiry Status Banner
-                        st.info(f"✅ **Badge Expiry Status:** {expiry_status_msg}")
-
-                    # ---------------------------------------------------------
-                    # DETECTED ROI VISUAL VERIFICATION & FEATURE BREAKDOWN
-                    # ---------------------------------------------------------
-                    st.markdown("<h4 class='section-header'>🔬 Extracted Sensor ROIs & Optical Color Features</h4>", unsafe_allow_html=True)
-
+                # Extracted Sensor ROIs & Features in Full-Width Expander
+                with st.expander("🔬 View Extracted Sensor ROIs & Optical Color Features", expanded=False):
                     roi_v_col1, roi_v_col2 = st.columns(2)
                     
                     with roi_v_col1:
@@ -942,8 +947,8 @@ elif page == "Scan Strip":
                             unsafe_allow_html=True
                         )
 
-                except Exception as e:
-                    st.error(f"❌ Scan analysis failed: {e}")
+            except Exception as e:
+                st.error(f"❌ Scan analysis failed: {e}")
 # -----------------------------------------------------------------------------
 # PAGE 3: WORKERS
 # -----------------------------------------------------------------------------
