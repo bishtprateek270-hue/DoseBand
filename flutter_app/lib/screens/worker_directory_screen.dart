@@ -178,7 +178,7 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> {
                         emergencyContact: phoneController.text.trim(),
                         status: 'Active',
                       );
-                      _workerService.addWorker(newWorker);
+                      _workerService.addWorker(worker: newWorker);
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(

@@ -31,6 +31,10 @@ class WorkerService extends ChangeNotifier {
   Map<String, dynamic> get dashboardStats => _dashboardStats;
   bool get isConnected => _apiService.isServerConnected;
 
+  int get activeWorkersCount => _workers.where((w) => w.status.toLowerCase() == 'active').length;
+  int get unsafeWorkersCount => _workers.where((w) => w.riskLevel.toLowerCase() == 'unsafe').length;
+  int get expiredBadgesCount => _workers.where((w) => w.isBadgeExpired).length;
+
   /// Fetches latest workers, sensor readings, and aggregated dashboard analytics from Python backend
   Future<void> refreshFromBackend() async {
     _isLoading = true;
@@ -235,28 +239,46 @@ class WorkerService extends ChangeNotifier {
   }
 
   Future<bool> addWorker({
-    required String workerId,
-    required String name,
-    required String department,
+    Worker? worker,
+    String? workerId,
+    String? name,
+    String? department,
     String workZone = 'Zone A - General Area',
-    required String shift,
+    String? shift,
     String badgeId = '',
     String badgeIssueDate = '',
     String badgeExpiryDate = '',
     String emergencyContact = '+91 98765 43210',
     String status = 'Active',
   }) async {
-    final effectiveBadge = badgeId.isNotEmpty ? badgeId : 'BDG-${workerId.replaceAll('W-', '')}';
+    final effectiveWorkerId = worker?.workerId ?? workerId ?? '';
+    final effectiveName = worker?.name ?? name ?? '';
+    final effectiveDept = worker?.department ?? department ?? '';
+    final effectiveZone = worker?.workZone ?? workZone;
+    final effectiveShift = worker?.shift ?? shift ?? 'Shift 1 (06:00 - 14:00)';
+    final effectiveBadge = worker?.badgeId.isNotEmpty == true
+        ? worker!.badgeId
+        : (badgeId.isNotEmpty ? badgeId : 'BDG-${effectiveWorkerId.replaceAll('W-', '')}');
+    final effectiveIssue = worker?.badgeIssueDate.isNotEmpty == true
+        ? worker!.badgeIssueDate
+        : (badgeIssueDate.isNotEmpty ? badgeIssueDate : DateTime.now().toIso8601String().substring(0, 10));
+    final effectiveExpiry = worker?.badgeExpiryDate.isNotEmpty == true
+        ? worker!.badgeExpiryDate
+        : (badgeExpiryDate.isNotEmpty ? badgeExpiryDate : DateTime.now().add(const Duration(days: 90)).toIso8601String().substring(0, 10));
+    final effectiveContact = worker?.emergencyContact.isNotEmpty == true ? worker!.emergencyContact : emergencyContact;
+    final effectiveStatus = worker?.status.isNotEmpty == true ? worker!.status : status;
+
     final workerMap = {
-      'worker_id': workerId,
-      'name': name,
-      'department': department,
-      'work_zone': workZone,
-      'shift': shift,
+      'worker_id': effectiveWorkerId,
+      'name': effectiveName,
+      'department': effectiveDept,
+      'work_zone': effectiveZone,
+      'shift': effectiveShift,
       'badge_id': effectiveBadge,
-      'badge_issue_date': badgeIssueDate.isNotEmpty ? badgeIssueDate : DateTime.now().toIso8601String().substring(0, 10),
-      'badge_expiry_date': badgeExpiryDate.isNotEmpty ? badgeExpiryDate : DateTime.now().add(const Duration(days: 90)).toIso8601String().substring(0, 10),
-      'status': status,
+      'badge_issue_date': effectiveIssue,
+      'badge_expiry_date': effectiveExpiry,
+      'emergency_contact': effectiveContact,
+      'status': effectiveStatus,
     };
 
     // Attempt backend creation
@@ -266,8 +288,8 @@ class WorkerService extends ChangeNotifier {
       if (kDebugMode) debugPrint('[WorkerService] addWorker backend note: $e');
     }
 
-    final newWorker = Worker.fromMap(workerMap);
-    _workers.removeWhere((w) => w.workerId == workerId);
+    final newWorker = worker ?? Worker.fromMap(workerMap);
+    _workers.removeWhere((w) => w.workerId == effectiveWorkerId);
     _workers.add(newWorker);
     notifyListeners();
     return true;

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../config/app_config.dart';
+import '../models/worker.dart';
 import '../services/worker_service.dart';
 import '../theme/app_theme.dart';
 import 'worker_detail_screen.dart';
@@ -147,7 +147,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // -----------------------------------------------------------------
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              margin: const EdgeInsets.bottom(16),
+              margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
                 color: isConnected ? const Color(0xFF064E3B).withOpacity(0.3) : const Color(0xFF7F1D1D).withOpacity(0.3),
                 borderRadius: BorderRadius.circular(10),
@@ -423,7 +423,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: DropdownButton<String>(
                     dropdownColor: const Color(0xFF1E293B),
                     value: worker.workerId,
-                    items: workers.map((w) {
+                    items: workers.whereType<Worker>().map((w) {
                       return DropdownMenuItem<String>(
                         value: w.workerId,
                         child: Text(w.workerId, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
@@ -471,7 +471,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => WorkerDetailScreen(worker: worker)),
+                    MaterialPageRoute(builder: (context) => WorkerDetailScreen(workerId: worker.workerId)),
                   );
                 },
                 child: Row(

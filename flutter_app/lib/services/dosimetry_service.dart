@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'api_service.dart';
@@ -75,7 +74,7 @@ class DosimetryService {
       final Uint8List bytes = await imageFile.readAsBytes();
       final String fileName = imageFile.path.split(Platform.pathSeparator).last;
 
-      return analyzeImageBytes(
+      return await analyzeImageBytes(
         bytes: bytes,
         fileName: fileName,
         workerId: workerId,

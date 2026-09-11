@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTheme {
   // Executive Dark Industrial Safety Palette (Matching DoseBand Web UI)
   static const Color scaffoldBg = Color(0xFF0E1117); // Web dark root background
+  static const Color backgroundDark = scaffoldBg; // Backward-compatible alias
   static const Color surfaceCard = Color(0xFF1E293B); // Elevated container / card surface
   static const Color surfaceDeep = Color(0xFF0F172A); // Deep inset surface
   static const Color borderColor = Color(0xFF334155); // Slate 700 border
