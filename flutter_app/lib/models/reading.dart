@@ -37,6 +37,10 @@ class Reading {
     this.actionGuidance = 'Maintain standard monitoring protocols.',
   });
 
+  String get formattedDate {
+    return '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} ${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,

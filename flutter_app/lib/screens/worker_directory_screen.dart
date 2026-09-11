@@ -295,30 +295,29 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
 
   Widget _buildWorkerCard(Worker w) {
     Color riskColor = AppTheme.safeGreen;
+    Color riskBg = AppTheme.safeGreenBg;
     if (w.isBadgeExpired || w.status != 'Active' || w.cumulativeDose >= 50.0) {
       riskColor = AppTheme.unsafeRed;
+      riskBg = AppTheme.unsafeRedBg;
     } else if (w.cumulativeDose >= 10.0) {
       riskColor = AppTheme.cautionYellow;
+      riskBg = AppTheme.cautionYellowBg;
     }
+
+    final double progress = (w.cumulativeDose / 50.0).clamp(0.0, 1.0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppTheme.borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AppTheme.cardShadow,
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(14),
           onTap: () {
             Navigator.push(
               context,
@@ -326,7 +325,7 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
             );
           },
           child: Padding(
-            padding: const EdgeInsets.all(12.0),
+            padding: const EdgeInsets.all(14.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -336,20 +335,27 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
                     Expanded(
                       child: Row(
                         children: [
-                          CircleAvatar(
-                            radius: 18,
-                            backgroundColor: const Color(0xFF0F172A),
-                            child: Text(
-                              w.workerId.replaceAll('W-', ''),
-                              style: const TextStyle(color: AppTheme.safetyOrange, fontWeight: FontWeight.bold, fontSize: 11),
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              gradient: AppTheme.navyHeroGradient,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: Text(
+                                w.workerId.replaceAll('W-', ''),
+                                style: const TextStyle(color: Color(0xFFFB923C), fontWeight: FontWeight.w900, fontSize: 12),
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(w.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                                Text(w.name, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+                                const SizedBox(height: 2),
                                 Text('${w.workerId} • ${w.department}', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
                               ],
                             ),
@@ -358,18 +364,43 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                       decoration: BoxDecoration(
-                        color: riskColor.withValues(alpha: 0.12),
+                        color: riskBg,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: riskColor.withValues(alpha: 0.4)),
                       ),
                       child: Text(
                         w.isBadgeExpired ? 'EXPIRED' : (w.status != 'Active' ? w.status.toUpperCase() : 'ACTIVE'),
-                        style: TextStyle(color: riskColor, fontSize: 10, fontWeight: FontWeight.w800),
+                        style: TextStyle(color: riskColor, fontSize: 9.5, fontWeight: FontWeight.w900, letterSpacing: 0.4),
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                // Cumulative Dose Progress Bar
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Cumulative Dose: ${w.cumulativeDose.toStringAsFixed(2)} ppm•h',
+                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: riskColor),
+                    ),
+                    Text(
+                      '${(50.0 - w.cumulativeDose).clamp(0.0, 50.0).toStringAsFixed(1)} ppm•h headroom',
+                      style: const TextStyle(fontSize: 10, color: AppTheme.textFaint),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: const Color(0xFFF1F5F9),
+                    valueColor: AlwaysStoppedAnimation<Color>(riskColor),
+                    minHeight: 5,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 const Divider(height: 1, color: Color(0xFFF1F5F9)),
@@ -377,19 +408,22 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Zone: ${w.workZone.split(" - ").first}', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-                    Text(
-                      'Dose: ${w.cumulativeDose.toStringAsFixed(2)} ppm•h',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: riskColor),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, size: 13, color: AppTheme.textMuted),
+                        const SizedBox(width: 3),
+                        Text(w.workZone.split(" - ").first, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+                      ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Badge: ${w.effectiveBadgeId}', style: const TextStyle(fontSize: 11, color: Color(0xFF0284C7), fontWeight: FontWeight.bold)),
-                    Text('Exp: ${w.badgeExpiryDate}', style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                    Row(
+                      children: [
+                        const Icon(Icons.qr_code_2_rounded, size: 13, color: Color(0xFF0284C7)),
+                        const SizedBox(width: 3),
+                        Text('Badge: ${w.effectiveBadgeId}', style: const TextStyle(fontSize: 11, color: Color(0xFF0284C7), fontWeight: FontWeight.w800)),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right_rounded, size: 16, color: AppTheme.textMuted),
+                      ],
+                    ),
                   ],
                 ),
               ],
@@ -828,23 +862,32 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
 
   Widget _buildMetricTile(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor),
+        boxShadow: AppTheme.cardShadow,
       ),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(title, style: const TextStyle(fontSize: 10, color: AppTheme.textMuted, fontWeight: FontWeight.w600), maxLines: 1),
-                Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+                Text(title, style: const TextStyle(fontSize: 10, color: AppTheme.textMuted, fontWeight: FontWeight.w700), maxLines: 1),
+                const SizedBox(height: 2),
+                Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppTheme.textPrimary, letterSpacing: -0.3)),
               ],
             ),
           ),

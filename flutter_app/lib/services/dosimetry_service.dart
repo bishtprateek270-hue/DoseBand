@@ -25,6 +25,9 @@ class DosimetryResult {
   final bool isAllowedToSave;
   final String expiryStatusMessage;
   final String dataSource;
+  final List<String> rejectionReasons;
+  final double temperatureC;
+  final double predictedHumidity;
 
   DosimetryResult({
     required this.isValid,
@@ -46,6 +49,9 @@ class DosimetryResult {
     this.isAllowedToSave = true,
     this.expiryStatusMessage = 'Active & Verified',
     this.dataSource = 'CALIBRATED_OPTICAL_DOSIMETRY_MODEL',
+    this.rejectionReasons = const [],
+    this.temperatureC = 25.0,
+    this.predictedHumidity = 50.0,
   });
 }
 
@@ -56,6 +62,55 @@ class DosimetryService {
   DosimetryService._internal();
 
   final ApiService _apiService = ApiService();
+
+  Future<bool> saveReading({
+    required String workerId,
+    required DosimetryResult result,
+  }) async {
+    try {
+      final readingData = {
+        'worker_id': workerId,
+        'intensity': result.correctedIntensity,
+        'dose': result.cumulativeDosePpmH,
+        'risk_level': result.riskLevel,
+        'is_expired': result.isBadgeExpired,
+        'expiry_status_message': result.expiryStatusMessage,
+        'temperature': result.temperatureC,
+        'humidity': result.predictedHumidity,
+        'raw_intensity': result.rawIntensity,
+        'corrected_intensity': result.correctedIntensity,
+        'compensation_factor': result.compensationFactor,
+        'exposure_time': 1.0,
+        'estimated_h2s_ppm': result.estimatedH2sPpm,
+        'data_source': result.dataSource,
+      };
+      await _apiService.saveReading(readingData);
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[DosimetryService] saveReading note: $e');
+      return false;
+    }
+  }
+
+  Future<DosimetryResult> processImage({
+    required Uint8List imageBytes,
+    String fileName = 'dosimeter_scan.jpg',
+    String workerId = 'W-101',
+    double temperatureC = 25.0,
+    double? humidityRh,
+    double exposureTimeHours = 1.0,
+    String badgeMode = 'STANDALONE_CHEMICAL_STRIP',
+  }) async {
+    return analyzeImageBytes(
+      bytes: imageBytes,
+      fileName: fileName,
+      workerId: workerId,
+      temperatureC: temperatureC,
+      humidityRh: humidityRh ?? 50.0,
+      exposureTimeHours: exposureTimeHours,
+      badgeMode: badgeMode,
+    );
+  }
 
   /// Baseline reference brightness levels (HSV Value channel [0-255])
   static const double baselineVUnexposed = 240.0;
@@ -144,6 +199,9 @@ class DosimetryService {
               'lightingCalibration': isValid,
             };
 
+      final List<String> rejectionReasons = (apiResponse['rejection_reasons'] as List?)?.map((e) => e.toString()).toList() ??
+          ((apiResponse['errors'] as List?)?.map((e) => e.toString()).toList() ?? <String>[]);
+
       return DosimetryResult(
         isValid: isValid,
         status: status,
@@ -164,6 +222,9 @@ class DosimetryService {
         isAllowedToSave: isAllowedToSave,
         expiryStatusMessage: expiryMsg,
         dataSource: 'DOSEBAND_REST_API',
+        rejectionReasons: rejectionReasons,
+        temperatureC: (apiResponse['temperature'] as num?)?.toDouble() ?? temperatureC,
+        predictedHumidity: (apiResponse['predicted_humidity'] ?? apiResponse['humidity'] as num?)?.toDouble() ?? humidityRh,
       );
     } catch (e) {
       if (kDebugMode) {
@@ -247,6 +308,8 @@ class DosimetryService {
           'lightingCalibration': false,
         },
         dataSource: 'LOCAL_FALLBACK_ENGINE',
+        temperatureC: temperatureC,
+        predictedHumidity: humidityRh,
       );
     }
 
@@ -296,6 +359,8 @@ class DosimetryService {
       validationBreakdown: valRes['breakdown'] as Map<String, dynamic>,
       preFlightChecks: preFlight,
       dataSource: 'LOCAL_FALLBACK_ENGINE',
+      temperatureC: temperatureC,
+      predictedHumidity: humidityRh,
     );
   }
 

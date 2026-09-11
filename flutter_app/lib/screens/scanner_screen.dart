@@ -376,18 +376,25 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppTheme.safetyOrangeBg,
-                    borderRadius: BorderRadius.circular(10),
+                    gradient: AppTheme.orangeAccentGradient,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.safetyOrange.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  child: const Icon(Icons.camera_alt_rounded, color: AppTheme.safetyOrange, size: 24),
+                  child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 22),
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Scan Sensor Strip', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
-                      Text('Identify worker via QR badge & analyze colorimetric chemical dosimeter', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                      Text('Scan & Analyze Dosimeter', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppTheme.textPrimary, letterSpacing: -0.4)),
+                      Text('Optical computer vision inspection with Ordinary Least Squares (OLS) calibration', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
                     ],
                   ),
                 ),
@@ -400,27 +407,69 @@ class _ScannerScreenState extends State<ScannerScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.borderColor),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _identifiedWorker != null ? AppTheme.safeGreen.withValues(alpha: 0.6) : AppTheme.borderColor,
+                  width: _identifiedWorker != null ? 1.5 : 1.0,
+                ),
+                boxShadow: AppTheme.cardShadow,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Step 1: Worker Identification & Badge Verification', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text('STEP 1', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w900)),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Worker Identification & Badge QR',
+                            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                          ),
+                        ],
+                      ),
+                      if (_identifiedWorker != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.safeGreenBg,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppTheme.safeGreen.withValues(alpha: 0.5)),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.check, size: 12, color: AppTheme.safeGreen),
+                              SizedBox(width: 3),
+                              Text('VERIFIED', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Color(0xFF065F46))),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
 
-                  // Only Camera QR Scan and Upload QR File options
+                  // Camera QR Scan and Upload QR File options
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
                           icon: const Icon(Icons.camera_alt_rounded, size: 18, color: AppTheme.safetyOrange),
-                          label: const Text('Camera QR Scan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                          label: const Text('Camera QR Scan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
                           onPressed: () => _verifyWorkerQr(ImageSource.camera),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppTheme.borderColor),
                             padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            backgroundColor: const Color(0xFFF8FAFC),
                           ),
                         ),
                       ),
@@ -428,12 +477,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           icon: const Icon(Icons.photo_library_rounded, size: 18, color: Color(0xFF0284C7)),
-                          label: const Text('Upload QR File', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                          label: const Text('Upload QR Badge', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
                           onPressed: () => _verifyWorkerQr(ImageSource.gallery),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppTheme.borderColor),
                             padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            backgroundColor: const Color(0xFFF8FAFC),
                           ),
                         ),
                       ),
@@ -446,19 +496,26 @@ class _ScannerScreenState extends State<ScannerScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
-                        borderRadius: BorderRadius.circular(10),
+                        gradient: AppTheme.navyHeroGradient,
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: const Color(0xFF059669), width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF059669).withValues(alpha: 0.15),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
                       ),
                       child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(4),
+                            padding: const EdgeInsets.all(6),
                             decoration: const BoxDecoration(
                               color: Color(0xFF065F46),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.check, color: Colors.white, size: 16),
+                            child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 18),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -467,12 +524,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
                               children: [
                                 Text(
                                   '${_identifiedWorker!.name} (${_identifiedWorker!.workerId})',
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   'Badge: ${_identifiedWorker!.effectiveBadgeId} • ${_identifiedWorker!.status.toUpperCase()} • ${_identifiedWorker!.department}',
-                                  style: const TextStyle(fontSize: 11, color: Color(0xFF34D399), fontWeight: FontWeight.w600),
+                                  style: const TextStyle(fontSize: 11, color: Color(0xFF34D399), fontWeight: FontWeight.w700),
                                 ),
                               ],
                             ),
@@ -496,7 +553,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: AppTheme.borderColor),
                       ),
                       child: Column(
@@ -520,7 +577,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                               onTap: _showQuickSelectDialog,
                               child: const Text(
                                 '🧪 Quick Test: Select Worker from Catalog ›',
-                                style: TextStyle(fontSize: 11, color: Color(0xFF0284C7), fontWeight: FontWeight.bold),
+                                style: TextStyle(fontSize: 11, color: Color(0xFF0284C7), fontWeight: FontWeight.w900),
                               ),
                             ),
                           ),
@@ -538,40 +595,73 @@ class _ScannerScreenState extends State<ScannerScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.borderColor),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _imageBytes != null ? AppTheme.safetyOrange.withValues(alpha: 0.6) : AppTheme.borderColor,
+                  width: _imageBytes != null ? 1.5 : 1.0,
+                ),
+                boxShadow: AppTheme.cardShadow,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Step 2: Capture Dosimeter Strip Photo', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text('STEP 2', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w900)),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('Capture Dosimeter Strip Photo', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+                        ],
+                      ),
+                      if (_imageBytes != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.safetyOrangeBg,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppTheme.safetyOrange.withValues(alpha: 0.5)),
+                          ),
+                          child: const Text('READY', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppTheme.safetyOrange)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
 
                   // Image Acquisition Buttons
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          icon: const Icon(Icons.camera_alt_rounded),
-                          label: const Text('Capture Strip'),
+                          icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                          label: const Text('Take Strip Photo'),
                           onPressed: () => _pickImage(ImageSource.camera),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF0F172A),
                             padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: OutlinedButton.icon(
-                          icon: const Icon(Icons.file_upload_outlined, color: AppTheme.textPrimary),
-                          label: const Text('Upload Photo', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold)),
+                          icon: const Icon(Icons.file_upload_outlined, color: AppTheme.textPrimary, size: 18),
+                          label: const Text('Upload Photo', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
                           onPressed: () => _pickImage(ImageSource.gallery),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppTheme.borderColor),
                             padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            backgroundColor: const Color(0xFFF8FAFC),
                           ),
                         ),
                       ),
@@ -580,10 +670,18 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
                   if (_imageBytes != null) ...[
                     const SizedBox(height: 14),
-                    Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(_imageBytes!, height: 160, fit: BoxFit.contain),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(_imageBytes!, height: 160, fit: BoxFit.contain),
+                        ),
                       ),
                     ),
                   ],
@@ -592,22 +690,26 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Step 3: Analyze & Run ML Model
-            SizedBox(
+            // Step 3: Analyze & Run ML Model Action Button
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: (_imageBytes != null && _identifiedWorker != null && !_isAnalyzing) ? AppTheme.orangeGlow : [],
+              ),
               width: double.infinity,
               child: ElevatedButton.icon(
                 icon: _isAnalyzing
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : const Icon(Icons.analytics_rounded, size: 20),
                 label: Text(
-                  _isAnalyzing ? 'Running ML Inference...' : '🔬 Analyze Dosimeter Strip',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+                  _isAnalyzing ? 'Running Optical Model Inference...' : '🔬 Analyze Dosimeter Strip',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 0.3),
                 ),
                 onPressed: (_imageBytes != null && _identifiedWorker != null && !_isAnalyzing) ? _analyzeStrip : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.safetyOrange,
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
               ),
             ),
