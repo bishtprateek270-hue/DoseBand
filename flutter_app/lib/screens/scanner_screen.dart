@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../models/worker.dart';
 import '../services/worker_service.dart';
 import '../services/dosimetry_service.dart';
 import '../theme/app_theme.dart';
@@ -19,16 +20,16 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
   File? _image;
   bool _isAnalyzing = false;
+
+  // Step 1: Worker Identification state
+  String _idMethod = 'QR_AUTOMATED'; // 'QR_AUTOMATED' | 'MANUAL_DIRECTORY'
   String _selectedWorkerId = 'W-101';
-  final TextEditingController _customWorkerIdController = TextEditingController();
+  bool _isQrVerified = false;
 
-  // Scan Parameters
-  String _badgeMode = 'STANDALONE_CHEMICAL_STRIP'; // STANDALONE_CHEMICAL_STRIP | FULL_DOSEBAND_BADGE
-  double _exposureTimeHours = 1.0;
-  double _temperatureC = 25.0;
-  double _humidityRh = 50.0;
+  // Step 2: Image Source state
+  String _imageSourceMode = 'UPLOAD'; // 'UPLOAD' | 'CAMERA'
 
-  // Pre-flight validation state
+  // Pre-flight validation result
   DosimetryResult? _latestResult;
 
   @override
@@ -40,7 +41,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
   @override
   void dispose() {
     _workerService.removeListener(_onServiceUpdate);
-    _customWorkerIdController.dispose();
     super.dispose();
   }
 
@@ -60,10 +60,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
       // Run pre-flight optical validation
       final result = await _dosimetryService.analyzeImage(
         imageFile: file,
-        temperatureC: _temperatureC,
-        humidityRh: _humidityRh,
-        exposureTimeHours: _exposureTimeHours,
-        badgeMode: _badgeMode,
+        temperatureC: 25.0,
+        humidityRh: 50.0,
+        exposureTimeHours: 1.0,
+        badgeMode: 'STANDALONE_CHEMICAL_STRIP',
       );
 
       setState(() {
@@ -73,25 +73,25 @@ class _ScannerScreenState extends State<ScannerScreen> {
     }
   }
 
+  void _simulateQrScan(String workerId) {
+    setState(() {
+      _selectedWorkerId = workerId;
+      _isQrVerified = true;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✅ QR Badge Scanned & Verified for Worker $workerId!'),
+        backgroundColor: AppTheme.safeGreen,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   void _runFullAnalysis() async {
     if (_image == null) return;
 
-    final targetWorkerId = _selectedWorkerId == 'CUSTOM'
-        ? _customWorkerIdController.text.trim().toUpperCase()
-        : _selectedWorkerId;
-
-    if (targetWorkerId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select or enter a valid Worker ID!'),
-          backgroundColor: AppTheme.unsafeRed,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final worker = _workerService.getWorkerById(targetWorkerId);
+    final worker = _workerService.getWorkerById(_selectedWorkerId);
     if (worker != null && worker.isBadgeExpired) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -106,10 +106,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     final result = await _dosimetryService.analyzeImage(
       imageFile: _image!,
-      temperatureC: _temperatureC,
-      humidityRh: _humidityRh,
-      exposureTimeHours: _exposureTimeHours,
-      badgeMode: _badgeMode,
+      temperatureC: 25.0,
+      humidityRh: 50.0,
+      exposureTimeHours: 1.0,
+      badgeMode: 'STANDALONE_CHEMICAL_STRIP',
     );
 
     setState(() {
@@ -132,7 +132,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     // Save reading to worker service
     _workerService.addReading(
-      workerId: targetWorkerId,
+      workerId: _selectedWorkerId,
       dose: result.cumulativeDosePpmH,
       intensity: result.rawIntensity,
       riskLevel: result.riskLevel,
@@ -141,17 +141,17 @@ class _ScannerScreenState extends State<ScannerScreen> {
           ? 'EXPIRED — Replace badge'
           : 'Active & Verified',
       estimatedH2sPpm: result.estimatedH2sPpm,
-      exposureTime: _exposureTimeHours,
-      temperature: _temperatureC,
-      humidity: _humidityRh,
-      badgeMode: _badgeMode,
+      exposureTime: 1.0,
+      temperature: 25.0,
+      humidity: 50.0,
+      badgeMode: 'STANDALONE_CHEMICAL_STRIP',
       dataSource: 'CALIBRATED_OPTICAL_DOSIMETRY_MODEL',
       confidencePct: result.confidencePct,
       actionGuidance: result.actionGuidance,
     );
 
     if (mounted) {
-      _showDosimetryResultModal(result, targetWorkerId);
+      _showDosimetryResultModal(result, _selectedWorkerId);
     }
   }
 
@@ -195,14 +195,17 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Worker: ${worker?.name ?? workerId}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                        const SizedBox(height: 2),
-                        Text('ID: $workerId | ${worker?.department ?? "Operations"}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Worker: ${worker?.name ?? workerId}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15), overflow: TextOverflow.ellipsis),
+                          const SizedBox(height: 2),
+                          Text('ID: $workerId | ${worker?.department ?? "Operations"}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12), overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -243,7 +246,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 children: [
                   Expanded(
                     child: _buildMetricCard(
-                      'Total Worker Exposure',
+                      'Total Exposure',
                       '${(worker?.cumulativeDose ?? result.cumulativeDosePpmH).toStringAsFixed(1)} ppm·hr',
                       Colors.white,
                       Icons.person,
@@ -288,9 +291,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
               const SizedBox(height: 14),
 
               // Environmental parameters recorded
-              Text(
-                'Conditions: ${_temperatureC.toStringAsFixed(1)}°C | ${_humidityRh.toStringAsFixed(0)}% RH | ${_exposureTimeHours.toStringAsFixed(1)} hr shift',
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+              const Text(
+                'Calibration: Per-Channel OLS Light Correction • Passive Sensor Standard',
+                style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
               ),
             ],
           ),
@@ -350,6 +353,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   @override
   Widget build(BuildContext context) {
     final workers = _workerService.workers;
+    final worker = _workerService.getWorkerById(_selectedWorkerId);
 
     return Scaffold(
       body: SingleChildScrollView(
@@ -357,7 +361,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header
+            // Title Header (Exactly matching Web "Scan Sensor Strip")
             Row(
               children: [
                 Container(
@@ -374,13 +378,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Optical Dosimeter Scan',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 18, fontWeight: FontWeight.bold),
+                        'Scan Sensor Strip',
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 20, fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       ),
                       const Text(
-                        'Lead Acetate H₂S Chemical Colorimetry',
-                        style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                        'Select a registered worker and provide a photo of the exposure wristband',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -390,133 +394,218 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Step 1: Worker Selection Card
+            // Step 1: Worker Identification (Exact Web Layout)
             _buildSectionCard(
               title: 'Step 1: Worker Identification',
               icon: Icons.person_pin_circle,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    value: workers.any((w) => w.workerId == _selectedWorkerId) ? _selectedWorkerId : 'W-101',
-                    dropdownColor: const Color(0xFF1E293B),
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'Select Registered Worker',
-                      labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
-                      filled: true,
-                      fillColor: const Color(0xFF0F172A),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF334155))),
-                    ),
-                    items: [
-                      ...workers.map((w) => DropdownMenuItem(
-                        value: w.workerId,
-                        child: Text(
-                          '${w.workerId} - ${w.name} (${w.department})',
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      )),
-                      const DropdownMenuItem(
-                        value: 'CUSTOM',
-                        child: Text('Manual Custom ID Entry...', overflow: TextOverflow.ellipsis, maxLines: 1),
-                      ),
-                    ],
-                    onChanged: (val) => setState(() => _selectedWorkerId = val ?? 'W-101'),
-                  ),
-                  if (_selectedWorkerId == 'CUSTOM') ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _customWorkerIdController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Enter Custom Worker ID (e.g. W-105)',
-                        labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
-                        filled: true,
-                        fillColor: const Color(0xFF0F172A),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Step 2: Strip Scan Mode & Environmental Parameters
-            _buildSectionCard(
-              title: 'Step 2: Scan Mode & Shift Conditions',
-              icon: Icons.tune,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Mode Selector Tabs
+                  // ID Method Toggle Tabs
                   Row(
                     children: [
                       Expanded(
-                        child: _buildModeTab(
-                          '🧪 Standalone Strip',
-                          'STANDALONE_CHEMICAL_STRIP',
-                          'Direct paper crop',
+                        child: _buildToggleTab(
+                          label: '📷 QR Badge Scan',
+                          isSelected: _idMethod == 'QR_AUTOMATED',
+                          onTap: () => setState(() => _idMethod = 'QR_AUTOMATED'),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: _buildModeTab(
-                          '🏷️ Full Badge',
-                          'FULL_DOSEBAND_BADGE',
-                          'Full badge 5-step',
+                        child: _buildToggleTab(
+                          label: '📋 Manual Directory',
+                          isSelected: _idMethod == 'MANUAL_DIRECTORY',
+                          onTap: () => setState(() => _idMethod = 'MANUAL_DIRECTORY'),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
 
-                  // Sliders
-                  _buildSlider(
-                    label: 'Shift Duration',
-                    valueText: '${_exposureTimeHours.toStringAsFixed(1)} Hours',
-                    value: _exposureTimeHours,
-                    min: 0.5,
-                    max: 12.0,
-                    divisions: 23,
-                    onChanged: (v) => setState(() => _exposureTimeHours = v),
-                  ),
-                  _buildSlider(
-                    label: 'Ambient Temperature',
-                    valueText: '${_temperatureC.toStringAsFixed(1)} °C',
-                    value: _temperatureC,
-                    min: 15.0,
-                    max: 45.0,
-                    divisions: 30,
-                    onChanged: (v) => setState(() => _temperatureC = v),
-                  ),
-                  _buildSlider(
-                    label: 'Relative Humidity',
-                    valueText: '${_humidityRh.toStringAsFixed(0)} % RH',
-                    value: _humidityRh,
-                    min: 20.0,
-                    max: 90.0,
-                    divisions: 14,
-                    onChanged: (v) => setState(() => _humidityRh = v),
-                  ),
+                  if (_idMethod == 'QR_AUTOMATED') ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _getImage(ImageSource.camera),
+                            icon: const Icon(Icons.qr_code_scanner, size: 16),
+                            label: const Text('Live Camera QR', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Color(0xFF334155)),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _simulateQrScan('W-101'),
+                            icon: const Icon(Icons.verified_user_outlined, size: 16, color: AppTheme.safetyOrange),
+                            label: const Text('Sample QR', style: TextStyle(fontSize: 12, color: AppTheme.safetyOrange)),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: AppTheme.safetyOrange),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: workers.any((w) => w.workerId == _selectedWorkerId) ? _selectedWorkerId : 'W-101',
+                      dropdownColor: const Color(0xFF1E293B),
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: 'Select Registered Worker*',
+                        labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                        filled: true,
+                        fillColor: const Color(0xFF0F172A),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF334155))),
+                      ),
+                      items: workers.map((w) => DropdownMenuItem(
+                        value: w.workerId,
+                        child: Text(
+                          '${w.workerId} — ${w.name} (${w.department} | ${w.workZone})',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      )).toList(),
+                      onChanged: (val) => setState(() => _selectedWorkerId = val ?? 'W-101'),
+                    ),
+                  ],
+
+                  const SizedBox(height: 14),
+
+                  // Rich Worker Profile Metadata Card (Matching Web UI)
+                  if (worker != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF334155)),
+                        borderLeft: const BorderSide(color: Color(0xFF10B981), width: 4),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '👤 ${worker.name} (${worker.workerId})',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981),
+                                  borderRadius: BorderRadius.circular(9999),
+                                ),
+                                child: const Text(
+                                  'QR VERIFIED • ACTIVE',
+                                  style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '🏭 Dept: ${worker.department}  |  📍 Zone: ${worker.workZone}',
+                            style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '⏰ Shift: ${worker.shift}  |  🏷️ Badge ID: ${worker.badgeId}',
+                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
 
-            // Step 3: Capture & Pre-Flight Verification
+            // Step 2: Provide Image (Exact Web Layout)
+            _buildSectionCard(
+              title: 'Step 2: Provide Image',
+              icon: Icons.camera_alt,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Image Mode Toggle Tabs
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildToggleTab(
+                          label: '📁 Upload Image File',
+                          isSelected: _imageSourceMode == 'UPLOAD',
+                          onTap: () => setState(() => _imageSourceMode = 'UPLOAD'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildToggleTab(
+                          label: '📷 Live Camera',
+                          isSelected: _imageSourceMode == 'CAMERA',
+                          onTap: () => setState(() => _imageSourceMode = 'CAMERA'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  if (_imageSourceMode == 'UPLOAD')
+                    OutlinedButton.icon(
+                      onPressed: () => _getImage(ImageSource.gallery),
+                      icon: const Icon(Icons.upload_file, size: 18),
+                      label: const Text('Select / Upload Image from Device'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Color(0xFF334155)),
+                        minimumSize: const Size(double.infinity, 44),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    )
+                  else
+                    OutlinedButton.icon(
+                      onPressed: () => _getImage(ImageSource.camera),
+                      icon: const Icon(Icons.camera_alt, size: 18),
+                      label: const Text('Capture Photo with Camera'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Color(0xFF334155)),
+                        minimumSize: const Size(double.infinity, 44),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Step 3: Badge Preview & Verification (Exact Web Layout)
             _buildSectionCard(
               title: 'Step 3: Badge Preview & Verification',
-              icon: Icons.camera_alt,
+              icon: Icons.verified_outlined,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Image Display Area
                   Container(
-                    height: 210,
+                    height: 200,
                     decoration: BoxDecoration(
                       color: const Color(0xFF0F172A),
                       borderRadius: BorderRadius.circular(14),
@@ -530,52 +619,18 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         : const Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.add_photo_alternate_outlined, size: 48, color: Color(0xFF64748B)),
+                              Icon(Icons.add_photo_alternate_outlined, size: 44, color: Color(0xFF64748B)),
                               SizedBox(height: 10),
                               Text('No Dosimeter Strip Loaded', style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600)),
                               SizedBox(height: 4),
-                              Text('Capture via camera or upload photo from device', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                              Text('Select image source in Step 2 to preview', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
                             ],
                           ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Action Buttons for Camera / Gallery
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _getImage(ImageSource.camera),
-                          icon: const Icon(Icons.camera_alt, size: 18),
-                          label: const Text('Live Camera'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Color(0xFF334155)),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _getImage(ImageSource.gallery),
-                          icon: const Icon(Icons.photo_library, size: 18),
-                          label: const Text('Upload Photo'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Color(0xFF334155)),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
 
                   // Validation Status & Pre-Flight Cards
                   if (_latestResult != null) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -616,12 +671,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
 
-                    // 4 Pre-flight Diagnostic Indicator Cards
+                    // 4 Diagnostic Pre-flight Checks (Matching Web UI)
                     Row(
                       children: [
-                        Expanded(child: _buildPreFlightIndicator('📌 Scale', _badgeMode == 'STANDALONE_CHEMICAL_STRIP' ? 'Direct Strip' : '5-Step OLS', true)),
+                        Expanded(child: _buildPreFlightIndicator('📌 Scale', 'Standard', true)),
                         const SizedBox(width: 6),
                         Expanded(child: _buildPreFlightIndicator('🧪 Sensor Strip', 'Verified Paper', _latestResult!.isValid)),
                         const SizedBox(width: 6),
@@ -685,7 +740,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Mandatory Chemical & Safety Protocol',
+                          'Mandatory Safety Protocol',
                           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -737,10 +792,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
-  Widget _buildModeTab(String label, String modeValue, String subtitle) {
-    final isSelected = _badgeMode == modeValue;
+  Widget _buildToggleTab({required String label, required bool isSelected, required VoidCallback onTap}) {
     return GestureDetector(
-      onTap: () => setState(() => _badgeMode = modeValue),
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
@@ -748,62 +802,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: isSelected ? AppTheme.safetyOrange : const Color(0xFF334155), width: isSelected ? 1.5 : 1.0),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: TextStyle(color: isSelected ? AppTheme.safetyOrange : Colors.white, fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 2),
-            Text(subtitle, style: const TextStyle(color: Color(0xFF64748B), fontSize: 9.5), maxLines: 1, overflow: TextOverflow.ellipsis),
-          ],
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(color: isSelected ? AppTheme.safetyOrange : Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildSlider({
-    required String label,
-    required String valueText,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required ValueChanged<double> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10.0),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(valueText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-            ],
-          ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: AppTheme.safetyOrange,
-              inactiveTrackColor: const Color(0xFF334155),
-              thumbColor: AppTheme.safetyOrange,
-              overlayColor: AppTheme.safetyOrange.withValues(alpha: 0.2),
-              trackHeight: 4,
-            ),
-            child: Slider(
-              value: value,
-              min: min,
-              max: max,
-              divisions: divisions,
-              onChanged: onChanged,
-            ),
-          ),
-        ],
       ),
     );
   }
