@@ -61,7 +61,11 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFF334155)),
+        ),
         title: Row(
           children: [
             Container(
@@ -73,7 +77,13 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
               child: const Icon(Icons.warning_amber_rounded, color: AppTheme.unsafeRed, size: 22),
             ),
             const SizedBox(width: 10),
-            const Text('Emergency Broadcast', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+            const Expanded(
+              child: Text(
+                'Emergency Broadcast',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Colors.white),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: Column(
@@ -82,28 +92,34 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
           children: [
             Text(
               'Initiating emergency contact call & SMS alert for Worker ${worker.workerId} (${worker.name}).',
-              style: const TextStyle(fontSize: 13, color: AppTheme.primaryNavy),
+              style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
             ),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.scaffoldBg,
+                color: const Color(0xFF1E293B),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.borderColor),
+                border: Border.all(color: const Color(0xFF334155)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.phone, size: 16, color: AppTheme.primaryNavy),
+                      const Icon(Icons.phone, size: 16, color: AppTheme.safetyOrange),
                       const SizedBox(width: 6),
-                      Text('Contact: ${worker.emergencyContact}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      Expanded(
+                        child: Text(
+                          'Contact: ${worker.emergencyContact}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text('🏢 Department: ${worker.department}', style: const TextStyle(fontSize: 12)),
+                  Text('🏢 Department: ${worker.department}', style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
                   Text('⚠️ Current Exposure: ${worker.cumulativeDose.toStringAsFixed(1)} ppm*hr', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.unsafeRed)),
                 ],
               ),
@@ -113,7 +129,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.primaryNavyLight)),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF94A3B8))),
           ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.unsafeRed),
@@ -128,7 +144,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
               );
             },
             icon: const Icon(Icons.phone_in_talk_rounded, size: 18),
-            label: const Text('Confirm Call'),
+            label: const Text('Confirm Call', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -142,7 +158,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
     if (worker == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Worker Profile')),
-        body: const Center(child: Text('Personnel record not found.')),
+        body: const Center(child: Text('Personnel record not found.', style: TextStyle(color: Color(0xFF94A3B8)))),
       );
     }
 
@@ -172,14 +188,11 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppTheme.primaryNavyDark, AppTheme.primaryNavy],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                color: const Color(0xFF1E293B),
                 borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF334155)),
                 boxShadow: [
-                  BoxShadow(color: AppTheme.primaryNavy.withValues(alpha: 0.25), blurRadius: 16, offset: const Offset(0, 6)),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6)),
                 ],
               ),
               child: Row(
@@ -188,14 +201,14 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                     width: 56,
                     height: 56,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
+                      color: const Color(0xFF0F172A),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white24, width: 1.5),
+                      border: Border.all(color: const Color(0xFF334155), width: 1.5),
                     ),
                     child: Center(
                       child: Text(
                         worker.workerId,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13),
+                        style: const TextStyle(color: AppTheme.safetyOrange, fontWeight: FontWeight.w900, fontSize: 13),
                       ),
                     ),
                   ),
@@ -212,7 +225,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                         const SizedBox(height: 2),
                         Text(
                           worker.department,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12),
+                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
@@ -228,12 +241,13 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: riskColor,
+                      color: riskColor.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: riskColor, width: 1),
                     ),
                     child: Text(
                       worker.riskLevel.toUpperCase(),
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 0.5),
+                      style: TextStyle(color: riskColor, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 0.5),
                     ),
                   ),
                 ],
@@ -261,7 +275,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                         children: const [
                           Text('HIGH EXPOSURE WARNING', style: TextStyle(color: AppTheme.unsafeRed, fontWeight: FontWeight.w800, fontSize: 13)),
                           SizedBox(height: 2),
-                          Text('Personnel exceeded 50.0 ppm*hr limit. Initiate immediate medical triage.', style: TextStyle(fontSize: 11, color: AppTheme.primaryNavy)),
+                          Text('Personnel exceeded 50.0 ppm*hr limit. Initiate immediate medical triage.', style: TextStyle(fontSize: 11, color: Color(0xFFE2E8F0))),
                         ],
                       ),
                     ),
@@ -290,7 +304,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                         children: const [
                           Text('SENSOR WRISTBAND EXPIRED', style: TextStyle(color: AppTheme.cautionYellow, fontWeight: FontWeight.w800, fontSize: 13)),
                           SizedBox(height: 2),
-                          Text('Passive sensor shelf-life ended. Re-issue fresh wristband.', style: TextStyle(fontSize: 11, color: AppTheme.primaryNavy)),
+                          Text('Passive sensor shelf-life ended. Re-issue fresh wristband.', style: TextStyle(fontSize: 11, color: Color(0xFFE2E8F0))),
                         ],
                       ),
                     ),
@@ -305,11 +319,11 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: const Color(0xFF1E293B),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppTheme.borderColor),
+                border: Border.all(color: const Color(0xFF334155)),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 8, offset: const Offset(0, 2)),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
                 ],
               ),
               child: Column(
@@ -317,8 +331,8 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: const [
-                      Text('Cumulative Dose', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppTheme.primaryNavy)),
-                      Text('Limit: 50.0 ppm*hr', style: TextStyle(color: AppTheme.primaryNavyLight, fontSize: 12, fontWeight: FontWeight.w600)),
+                      Text('Cumulative Dose', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.white)),
+                      Text('Limit: 50.0 ppm*hr', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.w600)),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -330,7 +344,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                         width: 140,
                         child: CircularProgressIndicator(
                           value: progress,
-                          backgroundColor: AppTheme.borderColor.withValues(alpha: 0.5),
+                          backgroundColor: const Color(0xFF334155),
                           color: riskColor,
                           strokeWidth: 12,
                           strokeCap: StrokeCap.round,
@@ -346,7 +360,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                               style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: riskColor, letterSpacing: -1.0),
                             ),
                           ),
-                          const Text('ppm*hr', style: TextStyle(fontSize: 11, color: AppTheme.primaryNavyLight, fontWeight: FontWeight.w600)),
+                          const Text('ppm*hr', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ],
@@ -356,7 +370,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
                       value: progress,
-                      backgroundColor: AppTheme.borderColor.withValues(alpha: 0.5),
+                      backgroundColor: const Color(0xFF334155),
                       color: riskColor,
                       minHeight: 8,
                     ),
@@ -377,8 +391,8 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                     onPressed: () => _showEmergencyDialog(worker),
-                    icon: const Icon(Icons.phone_rounded, size: 18),
-                    label: const Text('Emergency Call', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                    icon: const Icon(Icons.phone_rounded, size: 18, color: Colors.white),
+                    label: const Text('Emergency Call', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.white)),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -386,7 +400,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      side: const BorderSide(color: AppTheme.primaryNavy),
+                      side: const BorderSide(color: Color(0xFF334155)),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                     onPressed: () {
@@ -397,8 +411,8 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.picture_as_pdf_outlined, color: AppTheme.primaryNavy, size: 18),
-                    label: const Text('Export Report', style: TextStyle(color: AppTheme.primaryNavy, fontWeight: FontWeight.w700, fontSize: 13)),
+                    icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.white, size: 18),
+                    label: const Text('Export Report', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
                   ),
                 ),
               ],
@@ -406,11 +420,11 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
             const SizedBox(height: 24),
 
             // Scan History Log
-            Text('Individual Scan History (${readings.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.primaryNavy)),
+            Text('Individual Scan History (${readings.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
             const SizedBox(height: 12),
 
             if (readings.isEmpty)
-              const Text('No scan readings recorded for this worker yet.', style: TextStyle(color: AppTheme.primaryNavyLight, fontSize: 12))
+              const Text('No scan readings recorded for this worker yet.', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12))
             else
               ListView.separated(
                 shrinkWrap: true,
@@ -424,9 +438,9 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
 
                   return Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFF1E293B),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppTheme.borderColor),
+                      border: Border.all(color: const Color(0xFF334155)),
                     ),
                     child: ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -439,10 +453,10 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                         ),
                         child: Icon(Icons.sensors_rounded, color: rColor, size: 18),
                       ),
-                      title: Text('${reading.dose.toStringAsFixed(1)} ppm*hr', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppTheme.primaryNavy)),
+                      title: Text('${reading.dose.toStringAsFixed(1)} ppm*hr', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Colors.white)),
                       subtitle: Text(
                         DateFormat('MMM dd, yyyy  •  HH:mm').format(reading.timestamp),
-                        style: const TextStyle(fontSize: 11, color: AppTheme.primaryNavyLight),
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
                       ),
                       trailing: Text(
                         reading.riskLevel,

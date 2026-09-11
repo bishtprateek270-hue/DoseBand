@@ -201,34 +201,41 @@ class DosimetryService {
   /// 6-Criteria Physical Test Strip Validation
   Map<String, dynamic> _validateStrip(ColorSample sample, String badgeMode) {
     // 1. Saturation Neutrality Check (Lead Sulfide stain is low chromatic saturation, not vivid blue/red/green)
-    final double satScore = (1.0 - (sample.s / 80.0)).clamp(0.0, 1.0);
-    final bool isChromatic = sample.s > 85.0;
+    final double satScore = (1.0 - (sample.s / 65.0)).clamp(0.0, 1.0);
+    final bool isChromatic = sample.s > 65.0;
 
     // 2. Luminance & Exposure Check
-    final double lumScore = (sample.v > 15.0 && sample.v < 250.0) ? 1.0 : 0.2;
+    final double lumScore = (sample.v > 35.0 && sample.v < 240.0) ? 1.0 : 0.2;
+    final bool isExtremeLighting = sample.v <= 35.0 || sample.v >= 240.0;
 
-    // 3. Texture & Paper Density Check (contributes via geometry score constant 0.95)
+    // 3. Texture & Paper Density Check
+    final double textureScore = (sample.contrastVariance > 0.01 && sample.contrastVariance < 0.65) ? 1.0 : 0.3;
 
-    // 4. Reference / Direct Strip Alignment
-    final double alignmentScore = badgeMode == 'STANDALONE_CHEMICAL_STRIP' ? 0.96 : 0.90;
+    // 4. QR Code & High-Frequency Binary Screen Detection Guard
+    final bool isQrCodeOrBinary = sample.isBinaryPattern || (sample.extremeContrastCount > 0.40 && sample.s < 20);
 
-    // 5. Chemical Color Plausibility
+    // 5. Reference / Direct Strip Alignment
+    final double alignmentScore = badgeMode == 'STANDALONE_CHEMICAL_STRIP' ? 0.90 : 0.85;
+
+    // 6. Chemical Color Plausibility
     final double chemScore = isChromatic ? 0.1 : 0.95;
 
-    // 6. Overall Quality & Contrast
-    final double qualityScore = 0.92;
+    // 7. Overall Quality & Contrast
+    final double qualityScore = (!isExtremeLighting && !isQrCodeOrBinary) ? 0.90 : 0.20;
 
     // Weighted Confidence Calculation:
-    // 25% Alignment + 20% Contrast/Exposure + 20% Geometry + 15% Quality + 10% Humidity/Ref + 10% Texture/Chemical
-    final double totalScore = (0.25 * alignmentScore) +
+    // 25% Alignment + 20% Contrast/Exposure + 20% Geometry + 15% Quality + 10% Saturation + 10% Chemical
+    final double rawWeighted = (0.25 * alignmentScore) +
         (0.20 * lumScore) +
-        (0.20 * 0.95) +
+        (0.20 * textureScore) +
         (0.15 * qualityScore) +
         (0.10 * satScore) +
         (0.10 * chemScore);
 
-    final int confidencePct = (totalScore * 100).round().clamp(0, 100);
-    final bool isValid = confidencePct >= 70 && !isChromatic;
+    final bool hasHardFail = isChromatic || isExtremeLighting || isQrCodeOrBinary || sample.contrastVariance > 0.70;
+    final double finalScore = hasHardFail ? math.min(rawWeighted * 0.40, 0.45) : rawWeighted;
+    final int confidencePct = (finalScore * 100).round().clamp(0, 100);
+    final bool isValid = confidencePct >= 70 && !hasHardFail;
 
     final breakdown = {
       'refScale': {
@@ -243,7 +250,7 @@ class DosimetryService {
       },
       'geometry': {
         'name': 'Physical Geometry & Aspect',
-        'scorePct': 95,
+        'scorePct': (textureScore * 100).round(),
         'weightPct': 20,
       },
       'quality': {
@@ -267,9 +274,15 @@ class DosimetryService {
     String userMsg = 'Physical chemical test strip verified.';
     if (!isValid) {
       status = 'Invalid';
-      userMsg = isChromatic
-          ? 'Non-chemical vivid saturation detected. Please scan an authentic PbS dosimeter strip.'
-          : 'Unable to verify test strip paper structure. Please align under steady lighting.';
+      if (isQrCodeOrBinary) {
+        userMsg = 'QR Code or high-contrast barcode detected. Please scan QR in Step 1 and upload the physical exposure strip here.';
+      } else if (isChromatic) {
+        userMsg = 'Non-chemical vivid chromatic saturation detected. Please scan an authentic PbS dosimeter strip.';
+      } else if (isExtremeLighting) {
+        userMsg = 'Extreme lighting or glare detected. Please photograph strip in steady ambient light.';
+      } else {
+        userMsg = 'Image failed test strip optical verification. Please align authentic dosimeter strip.';
+      }
     }
 
     return {
@@ -281,16 +294,18 @@ class DosimetryService {
     };
   }
 
-  /// Samples color channels from raw image bytes
+  /// Samples color channels and structural pixel statistics from raw image bytes
   ColorSample _extractColorSample(Uint8List bytes) {
     if (bytes.length < 54) {
-      return ColorSample(r: 200, g: 200, b: 200, v: 200, s: 5, contrastVariance: 0.05);
+      return ColorSample(r: 200, g: 200, b: 200, v: 200, s: 5, contrastVariance: 0.05, isBinaryPattern: false, extremeContrastCount: 0.0);
     }
 
-    // Robust multi-point sampling across image byte stream
+    // Multi-point sampling across image byte stream
     int totalR = 0, totalG = 0, totalB = 0;
     int sampleCount = 0;
-    final int step = math.max(1, bytes.length ~/ 250);
+    int darkPixelCount = 0;
+    int brightPixelCount = 0;
+    final int step = math.max(1, bytes.length ~/ 400);
 
     for (int i = 0; i < bytes.length - 3; i += step) {
       final int b1 = bytes[i];
@@ -301,6 +316,10 @@ class DosimetryService {
       totalG += b2;
       totalB += b3;
       sampleCount++;
+
+      final int gray = (b1 + b2 + b3) ~/ 3;
+      if (gray < 30) darkPixelCount++;
+      if (gray > 225) brightPixelCount++;
     }
 
     if (sampleCount == 0) sampleCount = 1;
@@ -316,6 +335,9 @@ class DosimetryService {
     final double v = maxVal;
     final double s = maxVal == 0 ? 0.0 : (delta / maxVal) * 255.0;
 
+    final double extremeFraction = (darkPixelCount + brightPixelCount) / sampleCount;
+    final bool isBinaryPattern = darkPixelCount > (sampleCount * 0.20) && brightPixelCount > (sampleCount * 0.25);
+
     return ColorSample(
       r: meanR,
       g: meanG,
@@ -323,6 +345,8 @@ class DosimetryService {
       v: v,
       s: s,
       contrastVariance: (delta / 255.0).clamp(0.0, 1.0),
+      isBinaryPattern: isBinaryPattern,
+      extremeContrastCount: extremeFraction,
     );
   }
 
@@ -359,6 +383,8 @@ class ColorSample {
   final double v;
   final double s;
   final double contrastVariance;
+  final bool isBinaryPattern;
+  final double extremeContrastCount;
 
   ColorSample({
     required this.r,
@@ -367,5 +393,7 @@ class ColorSample {
     required this.v,
     required this.s,
     required this.contrastVariance,
+    required this.isBinaryPattern,
+    required this.extremeContrastCount,
   });
 }

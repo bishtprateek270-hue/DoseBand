@@ -4,7 +4,9 @@ class Worker {
   final String workerId;
   final String name;
   final String department;
+  final String workZone;
   final String shift;
+  final String badgeId;
   final String emergencyContact;
   final String status;
   final double cumulativeDose;
@@ -16,7 +18,9 @@ class Worker {
     required this.workerId,
     required this.name,
     required this.department,
+    this.workZone = 'Zone A - General Area',
     required this.shift,
+    this.badgeId = '',
     required this.emergencyContact,
     this.status = 'Active',
     this.cumulativeDose = 0.0,
@@ -25,11 +29,15 @@ class Worker {
     this.lastScanTime,
   });
 
+  String get effectiveBadgeId => badgeId.isNotEmpty ? badgeId : 'BDG-${workerId.replaceAll('W-', '')}';
+
   Worker copyWith({
     String? workerId,
     String? name,
     String? department,
+    String? workZone,
     String? shift,
+    String? badgeId,
     String? emergencyContact,
     String? status,
     double? cumulativeDose,
@@ -41,7 +49,9 @@ class Worker {
       workerId: workerId ?? this.workerId,
       name: name ?? this.name,
       department: department ?? this.department,
+      workZone: workZone ?? this.workZone,
       shift: shift ?? this.shift,
+      badgeId: badgeId ?? this.badgeId,
       emergencyContact: emergencyContact ?? this.emergencyContact,
       status: status ?? this.status,
       cumulativeDose: cumulativeDose ?? this.cumulativeDose,
@@ -56,7 +66,9 @@ class Worker {
       'workerId': workerId,
       'name': name,
       'department': department,
+      'workZone': workZone,
       'shift': shift,
+      'badgeId': badgeId,
       'emergencyContact': emergencyContact,
       'status': status,
       'cumulativeDose': cumulativeDose,
@@ -71,7 +83,9 @@ class Worker {
       workerId: map['workerId'] ?? '',
       name: map['name'] ?? '',
       department: map['department'] ?? '',
+      workZone: map['workZone'] ?? 'Zone A - General Area',
       shift: map['shift'] ?? '',
+      badgeId: map['badgeId'] ?? '',
       emergencyContact: map['emergencyContact'] ?? '',
       status: map['status'] ?? 'Active',
       cumulativeDose: (map['cumulativeDose'] as num?)?.toDouble() ?? 0.0,
