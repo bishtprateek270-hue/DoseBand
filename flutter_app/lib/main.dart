@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'screens/dashboard_screen.dart';
+import 'screens/home_screen.dart';
 import 'screens/scanner_screen.dart';
+import 'screens/verify_qr_screen.dart';
 import 'screens/worker_directory_screen.dart';
-import 'screens/history_screen.dart';
-import 'screens/reports_screen.dart';
+import 'screens/dashboard_screen.dart';
 import 'services/worker_service.dart';
 import 'theme/app_theme.dart';
 
@@ -18,7 +18,7 @@ class DoseBandApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'DoseBand - Industrial Dosimetry',
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.lightTheme,
       home: const MainNavigation(),
       debugShowCheckedModeBanner: false,
     );
@@ -52,71 +52,60 @@ class _MainNavigationState extends State<MainNavigation> {
     if (mounted) setState(() {});
   }
 
-  final List<Widget> _screens = const [
-    DashboardScreen(),
-    ScannerScreen(),
-    WorkerDirectoryScreen(),
-    HistoryScreen(),
-    ReportsScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final unsafeCount = _workerService.unsafeWorkersCount;
 
+    final List<Widget> screens = [
+      HomeScreen(onNavigate: (index) => setState(() => _currentIndex = index)),
+      const ScannerScreen(),
+      const VerifyQrScreen(),
+      const WorkerDirectoryScreen(),
+      const DashboardScreen(),
+    ];
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        backgroundColor: AppTheme.surfaceDeep,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 1,
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(7),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppTheme.safetyOrange.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
+                color: AppTheme.safetyOrangeBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.safetyOrange.withValues(alpha: 0.3)),
               ),
-              child: const Icon(Icons.shield_outlined, color: AppTheme.safetyOrange, size: 20),
+              child: const Icon(Icons.shield_rounded, color: AppTheme.safetyOrange, size: 20),
             ),
             const SizedBox(width: 10),
             const Text(
               'DoseBand',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 19, letterSpacing: -0.5, color: Colors.white),
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 18,
+                letterSpacing: -0.4,
+                color: AppTheme.textPrimary,
+              ),
             ),
             const SizedBox(width: 8),
-            Flexible(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppTheme.safeGreen.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.safeGreen.withValues(alpha: 0.4), width: 0.8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: AppTheme.safeGreen,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Flexible(
-                      child: Text(
-                        'LIVE',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.safeGreen,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFCBD5E1), width: 0.8),
+              ),
+              child: const Text(
+                'PASSIVE DOSIMETRY',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textSecondary,
+                  letterSpacing: 0.4,
                 ),
               ),
             ),
@@ -124,7 +113,7 @@ class _MainNavigationState extends State<MainNavigation> {
         ),
         actions: [
           IconButton(
-            tooltip: 'System Alerts',
+            tooltip: 'System Safety Status',
             icon: Stack(
               clipBehavior: Clip.none,
               children: [
@@ -152,8 +141,8 @@ class _MainNavigationState extends State<MainNavigation> {
                 SnackBar(
                   content: Text(
                     unsafeCount > 0
-                        ? '⚠️ $unsafeCount worker(s) currently exceed safety limits or have expired dosimeters!'
-                        : '✅ All active personnel are within safe exposure thresholds.',
+                        ? '⚠️ $unsafeCount worker(s) exceed safe limits or hold expired dosimeter badges.'
+                        : '✅ All active workforce operates within safe DGMS/OISD limits.',
                   ),
                   backgroundColor: unsafeCount > 0 ? AppTheme.unsafeRed : AppTheme.safeGreen,
                   behavior: SnackBarBehavior.floating,
@@ -164,54 +153,54 @@ class _MainNavigationState extends State<MainNavigation> {
           const SizedBox(width: 8),
         ],
       ),
-      body: _screens[_currentIndex],
+      body: screens[_currentIndex],
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
-          color: AppTheme.surfaceDeep,
+          color: Colors.white,
           border: Border(top: BorderSide(color: AppTheme.borderColor, width: 0.8)),
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: (index) => setState(() => _currentIndex = index),
           type: BottomNavigationBarType.fixed,
-          backgroundColor: AppTheme.surfaceDeep,
+          backgroundColor: Colors.white,
           selectedItemColor: AppTheme.safetyOrange,
-          unselectedItemColor: AppTheme.textFaint,
+          unselectedItemColor: AppTheme.textMuted,
           items: [
             const BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard_outlined),
-              activeIcon: Icon(Icons.dashboard),
-              label: 'Dashboard',
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home_rounded),
+              label: 'Home',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.camera_alt_outlined),
+              activeIcon: Icon(Icons.camera_alt_rounded),
+              label: 'Scan Strip',
             ),
             const BottomNavigationBarItem(
               icon: Icon(Icons.qr_code_scanner_outlined),
-              activeIcon: Icon(Icons.qr_code_scanner),
-              label: 'Scan Strip',
+              activeIcon: Icon(Icons.qr_code_scanner_rounded),
+              label: 'Verify QR',
             ),
             BottomNavigationBarItem(
               icon: Badge(
                 isLabelVisible: unsafeCount > 0,
                 label: Text('$unsafeCount'),
                 backgroundColor: AppTheme.unsafeRed,
-                child: const Icon(Icons.people_outline),
+                child: const Icon(Icons.badge_outlined),
               ),
               activeIcon: Badge(
                 isLabelVisible: unsafeCount > 0,
                 label: Text('$unsafeCount'),
                 backgroundColor: AppTheme.unsafeRed,
-                child: const Icon(Icons.people),
+                child: const Icon(Icons.badge_rounded),
               ),
-              label: 'Roster',
+              label: 'Workers',
             ),
             const BottomNavigationBarItem(
-              icon: Icon(Icons.insert_chart_outlined_rounded),
-              activeIcon: Icon(Icons.insert_chart_rounded),
-              label: 'Logs',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.assessment_outlined),
-              activeIcon: Icon(Icons.assessment_rounded),
-              label: 'Reports',
+              icon: Icon(Icons.dashboard_outlined),
+              activeIcon: Icon(Icons.dashboard_rounded),
+              label: 'Dashboard',
             ),
           ],
         ),

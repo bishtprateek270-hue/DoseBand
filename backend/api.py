@@ -30,6 +30,7 @@ if ROOT_DIR not in sys.path:
 
 import database
 import expiry_checker
+import exposure_forecaster
 import inference_engine
 import qr_manager
 import quality_validator
@@ -257,6 +258,7 @@ def get_badge(badge_id: str):
 
 
 @app.post("/badges/verify-qr", tags=["Badges"])
+@app.post("/qr/verify", tags=["Badges"])
 async def verify_badge_qr(
     file: Optional[UploadFile] = File(None),
     raw_payload: Optional[str] = Form(None)
@@ -294,6 +296,38 @@ async def verify_badge_qr(
 # -----------------------------------------------------------------------------
 # 3. OPTICAL GAS DOSIMETRY & ML INFERENCE ENGINE
 # -----------------------------------------------------------------------------
+
+@app.post("/scan/validate", tags=["Dosimetry"])
+async def validate_sensor_strip_only(
+    image: UploadFile = File(...)
+):
+    """
+    Validates physical strip texture, aspect ratio, sharpness, and optical characteristics.
+    Returns validation status and confidence score without running ML inference.
+    """
+    try:
+        contents = await image.read()
+        np_arr = np.frombuffer(contents, np.uint8)
+        img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if img_bgr is None:
+            raise HTTPException(status_code=400, detail="Invalid image file.")
+
+        strip_val_res = strip_validator.validate_test_strip(img_bgr)
+        quality_diag = quality_validator.evaluate_image_quality(img_bgr)
+
+        return to_serializable({
+            "is_valid": strip_val_res["is_valid"],
+            "status": strip_val_res["status"],
+            "validation_score": strip_val_res["validation_score"],
+            "confidence_pct": strip_val_res["confidence_pct"],
+            "user_message": strip_val_res["user_message"],
+            "rejection_reasons": strip_val_res.get("rejection_reasons", []),
+            "breakdown": strip_val_res.get("breakdown", {}),
+            "quality": quality_diag
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
+
 
 @app.post("/scan/analyze", tags=["Dosimetry"])
 async def analyze_sensor_strip(
@@ -506,42 +540,152 @@ def get_worker_readings(worker_id: str):
 def get_dashboard_data():
     """
     Returns live aggregated plant analytics matching the Streamlit Dashboard:
-    - Active worker count
-    - Total readings logged
-    - Average H2S ppm level
-    - Critical / Unsafe risk count
+    - Total workers, safe personnel, warning status, critical alerts, badges near expiry
+    - Prioritized Workers Requiring Attention list
+    - Dosimeter Badge Expiry Alerts
+    - Statistical Exposure Trend Forecasts from exposure_forecaster
     - Work zone risk distribution
     - Recent scans feed
     """
     workers_df = database.get_all_workers()
     readings_df = database.get_all_readings()
+    today_date = date.today()
 
-    total_workers = len(workers_df)
-    active_workers = len(workers_df[workers_df["status"] == "Active"]) if not workers_df.empty else 0
+    # Collect all unique worker IDs
+    worker_ids = set()
+    if not workers_df.empty:
+        worker_ids.update(workers_df["worker_id"].tolist())
+    if not readings_df.empty:
+        worker_ids.update(readings_df["worker_id"].tolist())
+
+    worker_attention_list = []
+    expiry_alerts_list = []
+    safe_count = 0
+    warning_count = 0
+    critical_count = 0
+    near_expiry_count = 0
+
+    UNSAFE_THRESHOLD = 50.0
+
+    for wid in sorted(list(worker_ids)):
+        w_profile = database.get_worker_by_id(wid) if not workers_df.empty else None
+        w_name = w_profile["name"] if w_profile else f"Worker {wid}"
+        w_zone = w_profile["work_zone"] if w_profile else "Unassigned Unit"
+        w_dept = w_profile["department"] if w_profile else "Operations"
+        w_badge = w_profile["badge_id"] if w_profile else "N/A"
+        w_status = w_profile["status"] if w_profile else "Active"
+        exp_date_str = w_profile["badge_expiry_date"] if w_profile else None
+
+        cum_dose = database.get_cumulative_dose(wid)
+
+        is_badge_expired = False
+        is_near_expiry = False
+        days_left = 999
+        badge_status_text = "✅ Active"
+
+        if exp_date_str:
+            try:
+                exp_date_val = datetime.strptime(exp_date_str, "%Y-%m-%d").date()
+                days_left = (exp_date_val - today_date).days
+                if exp_date_val < today_date or w_status != "Active":
+                    is_badge_expired = True
+                    badge_status_text = f"❌ EXPIRED ({abs(days_left)}d ago)" if exp_date_val < today_date else f"⏸️ {w_status}"
+                    expiry_alerts_list.append({
+                        "worker_id": wid,
+                        "name": w_name,
+                        "badge_id": w_badge,
+                        "dept": w_dept,
+                        "zone": w_zone,
+                        "expiry_date": exp_date_str,
+                        "days_left": days_left,
+                        "severity": "EXPIRED"
+                    })
+                elif days_left <= 7:
+                    is_near_expiry = True
+                    badge_status_text = f"⏳ Expiring ({days_left}d left)"
+                    expiry_alerts_list.append({
+                        "worker_id": wid,
+                        "name": w_name,
+                        "badge_id": w_badge,
+                        "dept": w_dept,
+                        "zone": w_zone,
+                        "expiry_date": exp_date_str,
+                        "days_left": days_left,
+                        "severity": "EXPIRING_SOON"
+                    })
+            except Exception:
+                pass
+
+        if is_badge_expired or is_near_expiry:
+            near_expiry_count += 1
+
+        latest_risk = "None"
+        if not readings_df.empty:
+            w_reads = readings_df[readings_df["worker_id"] == wid]
+            if not w_reads.empty:
+                latest_risk = str(w_reads.iloc[0]["risk_level"])
+
+        # Risk Classification Logic
+        requires_attention = False
+        if cum_dose >= UNSAFE_THRESHOLD or latest_risk.startswith("Unsafe"):
+            risk_status = "🔴 CRITICAL"
+            action_needed = "🚨 Medical review & work stoppage"
+            critical_count += 1
+            requires_attention = True
+            priority_rank = 1
+        elif is_badge_expired:
+            risk_status = "🔴 BADGE EXPIRED"
+            action_needed = "🛑 Prohibit entry; replace dosimeter badge"
+            critical_count += 1
+            requires_attention = True
+            priority_rank = 2
+        elif cum_dose >= 10.0 or is_near_expiry or latest_risk.startswith("Caution"):
+            risk_status = "🟡 WARNING"
+            action_needed = "⚠️ Shift rotation / swap badge"
+            warning_count += 1
+            requires_attention = True
+            priority_rank = 3
+        else:
+            risk_status = "🟢 SAFE"
+            action_needed = "Routine monitoring"
+            safe_count += 1
+            requires_attention = False
+            priority_rank = 4
+
+        if requires_attention:
+            worker_attention_list.append({
+                "priority": priority_rank,
+                "worker_id": wid,
+                "name": w_name,
+                "work_zone": w_zone,
+                "cumulative_dose": round(cum_dose, 2),
+                "risk_status": risk_status,
+                "badge_status": badge_status_text,
+                "action_needed": action_needed,
+                "raw_cum_dose": cum_dose
+            })
+
+    # Sort attention list
+    worker_attention_list.sort(key=lambda x: (x["priority"], -x["raw_cum_dose"]))
+
+    # Forecast summaries
+    all_forecasts = exposure_forecaster.get_all_workers_forecast_summary()
+
+    # Total readings and average ppm
     total_readings = len(readings_df)
-
     avg_ppm = 0.0
-    critical_alerts = 0
-    caution_alerts = 0
-    safe_scans = 0
-
     if not readings_df.empty:
         if "estimated_h2s_ppm" in readings_df.columns:
             avg_ppm = float(readings_df["estimated_h2s_ppm"].mean())
         elif "dose" in readings_df.columns:
             avg_ppm = float(readings_df["dose"].mean())
 
-        critical_alerts = int((readings_df["risk_level"].str.startswith("Unsafe")).sum())
-        caution_alerts = int((readings_df["risk_level"] == "Caution").sum())
-        safe_scans = int((readings_df["risk_level"] == "Safe").sum())
-
-    # Work zone risk heatmap breakdown
+    # Work zone risk distribution
     zone_stats = {}
     if not workers_df.empty:
         for zone in workers_df["work_zone"].unique():
             zone_wids = workers_df[workers_df["work_zone"] == zone]["worker_id"].tolist()
             zone_readings = readings_df[readings_df["worker_id"].isin(zone_wids)] if not readings_df.empty else pd.DataFrame()
-            
             zone_avg = float(zone_readings["estimated_h2s_ppm"].mean()) if (not zone_readings.empty and "estimated_h2s_ppm" in zone_readings.columns) else 0.0
             zone_critical = int((zone_readings["risk_level"].str.startswith("Unsafe")).sum()) if not zone_readings.empty else 0
             
@@ -553,10 +697,9 @@ def get_dashboard_data():
                 "status": "Critical" if zone_critical > 0 else ("Elevated" if zone_avg > 10.0 else "Normal")
             }
 
-    # Recent 10 scans
+    # Recent scans
     recent_scans = []
     if not readings_df.empty:
-        # Join worker names
         merged = readings_df.head(10).copy()
         if not workers_df.empty:
             name_map = dict(zip(workers_df["worker_id"], workers_df["name"]))
@@ -569,15 +712,19 @@ def get_dashboard_data():
 
     return to_serializable({
         "summary": {
-            "total_workers": total_workers,
-            "active_workers": active_workers,
+            "total_workers": len(worker_ids),
+            "active_workers": len(workers_df[workers_df["status"] == "Active"]) if not workers_df.empty else 0,
+            "safe_personnel": safe_count,
+            "warning_status": warning_count,
+            "critical_alert": critical_count,
+            "badges_near_expiry": near_expiry_count,
             "total_readings": total_readings,
             "average_h2s_ppm": round(avg_ppm, 2),
-            "critical_alerts": critical_alerts,
-            "caution_alerts": caution_alerts,
-            "safe_scans": safe_scans,
-            "compliance_rate_pct": round((1.0 - (critical_alerts / max(1, total_readings))) * 100, 1)
+            "compliance_rate_pct": round((1.0 - (critical_count / max(1, len(worker_ids)))) * 100, 1)
         },
+        "workers_requiring_attention": worker_attention_list,
+        "expiry_alerts": expiry_alerts_list,
+        "forecasts": all_forecasts,
         "zone_breakdown": zone_stats,
         "recent_scans": recent_scans,
         "timestamp": datetime.now().isoformat()
