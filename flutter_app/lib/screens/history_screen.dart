@@ -5,7 +5,7 @@ import '../theme/app_theme.dart';
 import 'worker_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  const HistoryScreen({Key? key}) : super(key: key);
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -73,22 +73,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Dosimeter Scan Logs',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppTheme.primaryNavy, letterSpacing: -0.5),
+              Text(
+                'Dosimeter Scan History',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.primaryNavy,
+                      fontSize: 20,
+                    ),
               ),
               const SizedBox(height: 2),
               const Text(
-                'Historical log of all sensor wristband scans & readings',
-                style: TextStyle(color: AppTheme.primaryNavyLight, fontSize: 12, fontWeight: FontWeight.w500),
+                'Audit-ready record of all worker dosimeter readings',
+                style: TextStyle(color: AppTheme.primaryNavyLight, fontSize: 12),
               ),
               const SizedBox(height: 16),
 
-              // Filter Controls Row
+              // Filter Row: Worker Dropdown & Risk Filter
               Row(
                 children: [
                   Expanded(
@@ -103,9 +107,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         child: DropdownButton<String>(
                           value: _selectedWorkerFilter,
                           isExpanded: true,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryNavy),
                           items: [
-                            const DropdownMenuItem(value: 'All', child: Text('All Personnel', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
+                            const DropdownMenuItem(value: 'All', child: Text('Filter: All Workers', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
                             ...workers.map((w) => DropdownMenuItem(
                                   value: w.workerId,
                                   child: Text('${w.workerId} (${w.name.split(' ').first})', style: const TextStyle(fontSize: 13)),
@@ -122,41 +125,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
               const SizedBox(height: 10),
 
-              // Risk Filter Tabs
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.borderColor.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.all(3),
+              // Segmented Risk Filter Chips
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: ['All', 'Safe', 'Caution', 'Unsafe'].map((filter) {
-                    final isSelected = _selectedRiskFilter == filter;
-                    return Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _selectedRiskFilter = filter),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 7),
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : Colors.transparent,
-                            borderRadius: BorderRadius.circular(9),
-                            boxShadow: isSelected
-                                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2))]
-                                : [],
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            filter,
-                            style: TextStyle(
-                              color: isSelected ? AppTheme.primaryNavy : AppTheme.primaryNavyLight,
-                              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                  children: [
+                    _buildFilterChip('All', readings.length),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Safe', readings.where((r) => r.riskLevel == 'Safe').length),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Caution', readings.where((r) => r.riskLevel == 'Caution').length),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Unsafe', readings.where((r) => r.riskLevel == 'Unsafe').length),
+                  ],
                 ),
               ),
             ],
@@ -168,24 +149,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
           child: filteredReadings.isEmpty
               ? Container(
                   width: double.infinity,
-                  margin: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.all(20),
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: AppTheme.borderColor),
                   ),
-                  child: Column(
+                  child: const Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.history_toggle_off_rounded, size: 40, color: AppTheme.primaryNavyLight),
-                      SizedBox(height: 10),
-                      Text('No scan records found matching filters.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    children: [
+                      Icon(Icons.history_toggle_off, size: 48, color: AppTheme.primaryNavyLight),
+                      SizedBox(height: 12),
+                      Text('No readings match your filter criteria.', style: TextStyle(fontWeight: FontWeight.bold)),
                     ],
                   ),
                 )
               : ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   itemCount: filteredReadings.length,
                   separatorBuilder: (context, index) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
@@ -204,7 +185,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         ],
                       ),
                       child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         onTap: () {
                           if (worker != null) {
                             Navigator.push(
@@ -216,8 +197,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           }
                         },
                         leading: Container(
-                          width: 42,
-                          height: 42,
+                          width: 44,
+                          height: 44,
                           decoration: BoxDecoration(
                             color: riskBg,
                             borderRadius: BorderRadius.circular(12),
@@ -233,13 +214,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         title: Row(
                           children: [
                             Text(
-                              '${reading.dose.toStringAsFixed(1)} ppm*hr',
+                              '${reading.estimatedH2sPpm.toStringAsFixed(1)} ppm',
                               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppTheme.primaryNavy),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '(${reading.dose.toStringAsFixed(1)} ppm·hr)',
+                              style: const TextStyle(color: AppTheme.safetyOrange, fontWeight: FontWeight.w700, fontSize: 12),
                             ),
                             const SizedBox(width: 6),
                             Flexible(
                               child: Text(
-                                '(${worker?.name ?? 'ID ${reading.workerId}'})',
+                                '• ${worker?.name ?? reading.workerId}',
                                 style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 12, fontWeight: FontWeight.w500),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -247,27 +233,33 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           ],
                         ),
                         subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 3.0),
+                          padding: const EdgeInsets.only(top: 4.0),
                           child: Text(
-                            DateFormat('MMM dd, yyyy  •  HH:mm').format(reading.timestamp),
-                            style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 11),
+                            '${DateFormat('MMM dd, yyyy • HH:mm').format(reading.timestamp)} • ${reading.temperature.toStringAsFixed(0)}°C, ${reading.humidity.toStringAsFixed(0)}% RH • ${reading.exposureTime.toStringAsFixed(1)}h shift',
+                            style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 11.5),
                           ),
                         ),
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: riskBg,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            reading.riskLevel.toUpperCase(),
-                            style: TextStyle(
-                              color: riskColor,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 10,
-                              letterSpacing: 0.4,
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: riskBg,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                reading.riskLevel.toUpperCase(),
+                                style: TextStyle(
+                                  color: riskColor,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 10,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
                     );
@@ -275,6 +267,53 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFilterChip(String label, int count) {
+    final isSelected = _selectedRiskFilter == label;
+    final color = label == 'All' ? AppTheme.primaryNavy : _getRiskColor(label);
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedRiskFilter = label),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? color : color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? color : color.withValues(alpha: 0.2),
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : color,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.white.withValues(alpha: 0.2) : color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  color: isSelected ? Colors.white : color,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
