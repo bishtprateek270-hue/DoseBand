@@ -73,6 +73,8 @@ class AppConfig {
   static String get reportsSummaryEndpoint => '$apiBaseUrl/reports/summary';
 
   static String workerEndpoint(String workerId) => '$apiBaseUrl/workers/$workerId';
+  static String workerBadgeCardEndpoint(String workerId) => '$apiBaseUrl/workers/$workerId/badge-card';
+  static String workerQrEndpoint(String workerId) => '$apiBaseUrl/workers/$workerId/qr';
   static String workerHistoryEndpoint(String workerId) => '$apiBaseUrl/workers/$workerId/history';
   static String badgeEndpoint(String badgeId) => '$apiBaseUrl/badges/$badgeId';
   static String reportPdfDownloadEndpoint(String workerId) => '$apiBaseUrl/reports/download/pdf?worker_id=$workerId';

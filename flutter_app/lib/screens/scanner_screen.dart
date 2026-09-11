@@ -288,8 +288,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final workers = _workerService.workers;
-
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       body: SingleChildScrollView(
@@ -314,7 +312,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Scan Sensor Strip', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
-                      Text('Identify worker, set environment & analyze colorimetric chemical dosimeter', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                      Text('Identify worker via QR badge & analyze colorimetric chemical dosimeter', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
                     ],
                   ),
                 ),
@@ -322,7 +320,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Step 1: Worker Identification Card
+            // Step 1: Worker Identification & Badge Verification Card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -333,140 +331,98 @@ class _ScannerScreenState extends State<ScannerScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Step 1: Worker Identification', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                  const SizedBox(height: 10),
+                  const Text('Step 1: Worker Identification & Badge Verification', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                  const SizedBox(height: 12),
 
-                  // Method Switcher (QR vs Manual)
+                  // Only Camera QR Scan and Upload QR File options
                   Row(
                     children: [
                       Expanded(
-                        child: InkWell(
-                          onTap: () => setState(() => _idMethod = 'QR_AUTOMATED'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                            decoration: BoxDecoration(
-                              color: _idMethod == 'QR_AUTOMATED' ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.qr_code_scanner_rounded, size: 16, color: _idMethod == 'QR_AUTOMATED' ? Colors.white : AppTheme.textSecondary),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Scan QR Badge',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: _idMethod == 'QR_AUTOMATED' ? Colors.white : AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.camera_alt_rounded, size: 18, color: AppTheme.safetyOrange),
+                          label: const Text('Camera QR Scan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                          onPressed: () => _verifyWorkerQr(ImageSource.camera),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppTheme.borderColor),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Expanded(
-                        child: InkWell(
-                          onTap: () => setState(() {
-                            _idMethod = 'MANUAL_DIRECTORY';
-                            _isWorkerIdentified = true;
-                          }),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                            decoration: BoxDecoration(
-                              color: _idMethod == 'MANUAL_DIRECTORY' ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.list_alt_rounded, size: 16, color: _idMethod == 'MANUAL_DIRECTORY' ? Colors.white : AppTheme.textSecondary),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Manual Selection',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: _idMethod == 'MANUAL_DIRECTORY' ? Colors.white : AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.photo_library_rounded, size: 18, color: Color(0xFF0284C7)),
+                          label: const Text('Upload QR File', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                          onPressed: () => _verifyWorkerQr(ImageSource.gallery),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppTheme.borderColor),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                         ),
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 12),
 
-                  if (_idMethod == 'QR_AUTOMATED') ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.camera_alt_outlined, size: 16),
-                            label: const Text('Camera QR', style: TextStyle(fontSize: 12)),
-                            onPressed: () => _verifyWorkerQr(ImageSource.camera),
+                  if (_identifiedWorker != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF059669), width: 1.5),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF065F46),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.check, color: Colors.white, size: 16),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.photo_library_outlined, size: 16),
-                            label: const Text('Upload QR', style: TextStyle(fontSize: 12)),
-                            onPressed: () => _verifyWorkerQr(ImageSource.gallery),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${_identifiedWorker!.name} (${_identifiedWorker!.workerId})',
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Badge: ${_identifiedWorker!.effectiveBadgeId} • ${_identifiedWorker!.status.toUpperCase()}',
+                                  style: const TextStyle(fontSize: 11, color: Color(0xFF34D399), fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ] else ...[
-                    if (workers.isNotEmpty)
-                      DropdownButtonFormField<Worker>(
-                        value: _identifiedWorker ?? workers.first,
-                        decoration: const InputDecoration(labelText: 'Select Registered Worker'),
-                        items: workers.map((w) {
-                          return DropdownMenuItem(
-                            value: w,
-                            child: Text('${w.workerId} — ${w.name} (${w.department})', style: const TextStyle(fontSize: 12)),
-                          );
-                        }).toList(),
-                        onChanged: (w) {
-                          if (w != null) {
-                            setState(() {
-                              _identifiedWorker = w;
-                              _isWorkerIdentified = true;
-                              _isQrVerified = false;
-                            });
-                          }
-                        },
-                      )
-                    else
-                      const Text('No workers found in SQLite database.', style: TextStyle(color: AppTheme.textMuted)),
-                  ],
-
-                  if (_identifiedWorker != null) ...[
-                    const SizedBox(height: 10),
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: AppTheme.borderColor),
                       ),
-                      child: Row(
+                      child: const Row(
                         children: [
-                          const Icon(Icons.person_pin_rounded, color: AppTheme.safetyOrange, size: 20),
-                          const SizedBox(width: 8),
+                          Icon(Icons.qr_code_scanner_rounded, color: AppTheme.textMuted, size: 18),
+                          SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Selected: ${_identifiedWorker!.name} (${_identifiedWorker!.workerId}) • ${_identifiedWorker!.workZone}',
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                              'Please scan or upload an official DoseBand worker QR badge to identify the worker.',
+                              style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                             ),
                           ),
-                          if (_isQrVerified)
-                            const Icon(Icons.verified_rounded, color: AppTheme.safeGreen, size: 16),
                         ],
                       ),
                     ),
@@ -476,7 +432,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Step 2: Environmental & Exposure Parameters
+            // Step 2: Capture Dosimeter Strip Photo Card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -487,45 +443,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Step 2: Environmental & Shift Inputs', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                  const Text('Step 2: Capture Dosimeter Strip Photo', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
                   const SizedBox(height: 12),
 
-                  // Temperature Slider
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Ambient Temperature:', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                      Text('${_temperatureC.toStringAsFixed(1)}°C', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                    ],
-                  ),
-                  Slider(
-                    value: _temperatureC,
-                    min: 0.0,
-                    max: 50.0,
-                    divisions: 50,
-                    activeColor: AppTheme.safetyOrange,
-                    onChanged: (v) => setState(() => _temperatureC = v),
-                  ),
-
-                  // Exposure Duration Slider
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Shift Exposure Time:', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                      Text('${_exposureTimeHours.toStringAsFixed(1)} hours', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                    ],
-                  ),
-                  Slider(
-                    value: _exposureTimeHours,
-                    min: 0.5,
-                    max: 12.0,
-                    divisions: 23,
-                    activeColor: const Color(0xFF0284C7),
-                    onChanged: (v) => setState(() => _exposureTimeHours = v),
-                  ),
-
                   // Image Acquisition Buttons
-                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
@@ -533,10 +454,14 @@ class _ScannerScreenState extends State<ScannerScreen> {
                           icon: const Icon(Icons.camera_alt_rounded),
                           label: const Text('Capture Strip'),
                           onPressed: () => _pickImage(ImageSource.camera),
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0F172A),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: OutlinedButton.icon(
                           icon: const Icon(Icons.file_upload_outlined, color: AppTheme.textPrimary),
@@ -544,8 +469,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
                           onPressed: () => _pickImage(ImageSource.gallery),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppTheme.borderColor),
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                         ),
                       ),

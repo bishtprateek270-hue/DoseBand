@@ -248,6 +248,27 @@ def delete_worker_profile(worker_id: str):
     return {"success": True, "worker_id": worker_id, "message": "Worker deleted."}
 
 
+@app.get("/workers/{worker_id}/qr", tags=["Workers"])
+def get_worker_qr_image(worker_id: str):
+    """Generates and streams a PNG QR code for the worker's registered badge."""
+    w = database.get_worker_by_id(worker_id)
+    if not w:
+        raise HTTPException(status_code=404, detail=f"Worker '{worker_id}' not found.")
+    badge_id = w.get("badge_id", f"BDG-{worker_id}")
+    qr_png = qr_manager.generate_badge_qr_png(worker_id, badge_id)
+    return Response(content=qr_png, media_type="image/png")
+
+
+@app.get("/workers/{worker_id}/badge-card", tags=["Workers"])
+def get_worker_badge_card(worker_id: str):
+    """Generates and streams a branded printable industrial badge card image for the worker."""
+    w = database.get_worker_by_id(worker_id)
+    if not w:
+        raise HTTPException(status_code=404, detail=f"Worker '{worker_id}' not found.")
+    card_png = qr_manager.generate_styled_badge_card(w)
+    return Response(content=card_png, media_type="image/png")
+
+
 @app.get("/badges/{badge_id}", tags=["Badges"])
 def get_badge(badge_id: str):
     """Looks up a worker profile by unique badge identifier (e.g. 'BDG-101')."""
@@ -255,6 +276,7 @@ def get_badge(badge_id: str):
     if not w:
         raise HTTPException(status_code=404, detail=f"Badge '{badge_id}' not found.")
     return w
+
 
 
 @app.post("/badges/verify-qr", tags=["Badges"])

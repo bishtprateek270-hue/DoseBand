@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/app_config.dart';
 import '../models/worker.dart';
 import '../models/reading.dart';
 import '../services/worker_service.dart';
@@ -122,6 +123,20 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                   _buildDossierRow('Badge ID:', w.effectiveBadgeId),
                   _buildDossierRow('Issue Date:', w.badgeIssueDate),
                   _buildDossierRow('Expiry Date:', w.badgeExpiryDate),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.qr_code_2_rounded, color: Color(0xFF38BDF8), size: 18),
+                      label: const Text('View Official QR Badge Card', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 12)),
+                      onPressed: () => _showBadgeDialog(context, w),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF38BDF8)),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -257,6 +272,92 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _showBadgeDialog(BuildContext context, Worker w) {
+    final badgeCardUrl = AppConfig.workerBadgeCardEndpoint(w.workerId);
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Official QR Smart Badge', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white70),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  badgeCardUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Container(
+                      height: 200,
+                      color: const Color(0xFF1E293B),
+                      child: const Center(
+                        child: CircularProgressIndicator(color: AppTheme.safetyOrange),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.qr_code_2_rounded, color: Color(0xFF38BDF8), size: 48),
+                          const SizedBox(height: 8),
+                          Text('Badge: ${w.effectiveBadgeId}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          Text('Worker: ${w.workerId} — ${w.name}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                          const SizedBox(height: 8),
+                          Text(
+                            'JSON Payload:\n{"app":"DoseBand","worker_id":"${w.workerId}","badge_id":"${w.effectiveBadgeId}","version":"1.0"}',
+                            style: const TextStyle(color: Color(0xFFF97316), fontFamily: 'monospace', fontSize: 10),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '🔒 DoseBand Cryptographic Identification — Scan with mobile or station reader at shift start.',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.safetyOrange),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -141,7 +141,6 @@ class _VerifyQrScreenState extends State<VerifyQrScreen> {
                 children: [
                   _buildTabButton('Camera', Icons.camera_alt_outlined),
                   _buildTabButton('Upload Image', Icons.file_upload_outlined),
-                  _buildTabButton('Quick Test', Icons.badge_outlined),
                 ],
               ),
             ),
@@ -168,10 +167,14 @@ class _VerifyQrScreenState extends State<VerifyQrScreen> {
                         icon: const Icon(Icons.camera_alt_rounded),
                         label: const Text('Capture Badge QR with Camera'),
                         onPressed: () => _pickImage(ImageSource.camera),
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0284C7),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
                       ),
                     ),
-                  ] else if (_inputMode == 'Upload Image') ...[
+                  ] else ...[
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
@@ -185,50 +188,6 @@ class _VerifyQrScreenState extends State<VerifyQrScreen> {
                         ),
                       ),
                     ),
-                  ] else ...[
-                    // Quick Test with Registered Workers
-                    if (workers.isNotEmpty) ...[
-                      DropdownButtonFormField<Worker>(
-                        value: _selectedTestWorker ?? workers.first,
-                        decoration: const InputDecoration(
-                          labelText: 'Select Registered Worker to Test',
-                          prefixIcon: Icon(Icons.badge_outlined, color: AppTheme.safetyOrange),
-                        ),
-                        items: workers.map((w) {
-                          return DropdownMenuItem(
-                            value: w,
-                            child: Text('${w.workerId} — ${w.name} (${w.effectiveBadgeId})', style: const TextStyle(fontSize: 13)),
-                          );
-                        }).toList(),
-                        onChanged: (w) {
-                          if (w != null) {
-                            setState(() {
-                              _selectedTestWorker = w;
-                              _badgeImageBytes = null;
-                            });
-                            // Send authentic JSON payload string
-                            final payload = '{"app":"DoseBand","worker_id":"${w.workerId}","badge_id":"${w.effectiveBadgeId}","version":"1.0"}';
-                            _verifyBadge(rawPayload: payload);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          icon: const Icon(Icons.verified_user_rounded),
-                          label: const Text('Test Selected Worker Badge'),
-                          onPressed: () {
-                            final w = _selectedTestWorker ?? workers.first;
-                            final payload = '{"app":"DoseBand","worker_id":"${w.workerId}","badge_id":"${w.effectiveBadgeId}","version":"1.0"}';
-                            _verifyBadge(rawPayload: payload);
-                          },
-                          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.safetyOrange),
-                        ),
-                      ),
-                    ] else ...[
-                      const Text('No registered workers available in SQLite database.', style: TextStyle(color: AppTheme.textMuted)),
-                    ],
                   ],
 
                   if (_badgeImageBytes != null) ...[
