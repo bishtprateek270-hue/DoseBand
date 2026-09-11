@@ -213,14 +213,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         ),
                         title: Row(
                           children: [
-                            Text(
-                              '${reading.estimatedH2sPpm.toStringAsFixed(1)} ppm',
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppTheme.primaryNavy),
+                            Flexible(
+                              flex: 0,
+                              child: Text(
+                                '${reading.estimatedH2sPpm.toStringAsFixed(1)} ppm',
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppTheme.primaryNavy),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             const SizedBox(width: 6),
-                            Text(
-                              '(${reading.dose.toStringAsFixed(1)} ppm·hr)',
-                              style: const TextStyle(color: AppTheme.safetyOrange, fontWeight: FontWeight.w700, fontSize: 12),
+                            Flexible(
+                              flex: 0,
+                              child: Text(
+                                '(${reading.dose.toStringAsFixed(1)} ppm·hr)',
+                                style: const TextStyle(color: AppTheme.safetyOrange, fontWeight: FontWeight.w700, fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             const SizedBox(width: 6),
                             Flexible(
