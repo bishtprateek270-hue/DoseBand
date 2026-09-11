@@ -81,14 +81,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 'Dosimeter Scan History',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w900,
-                      color: AppTheme.primaryNavy,
+                      color: Colors.white,
                       fontSize: 20,
                     ),
               ),
               const SizedBox(height: 2),
               const Text(
                 'Audit-ready record of all worker dosimeter readings',
-                style: TextStyle(color: AppTheme.primaryNavyLight, fontSize: 12),
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
               ),
               const SizedBox(height: 16),
 
@@ -99,19 +99,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: const Color(0xFF1E293B),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.borderColor),
+                        border: Border.all(color: const Color(0xFF334155)),
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _selectedWorkerFilter,
+                          dropdownColor: const Color(0xFF1E293B),
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
                           isExpanded: true,
                           items: [
-                            const DropdownMenuItem(value: 'All', child: Text('Filter: All Workers', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
+                            const DropdownMenuItem(value: 'All', child: Text('Filter: All Workers', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white))),
                             ...workers.map((w) => DropdownMenuItem(
                                   value: w.workerId,
-                                  child: Text('${w.workerId} (${w.name.split(' ').first})', style: const TextStyle(fontSize: 13)),
+                                  child: Text('${w.workerId} (${w.name.split(' ').first})', style: const TextStyle(fontSize: 13, color: Colors.white)),
                                 )),
                           ],
                           onChanged: (val) {
@@ -152,16 +154,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   margin: const EdgeInsets.all(20),
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: const Color(0xFF1E293B),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppTheme.borderColor),
+                    border: Border.all(color: const Color(0xFF334155)),
                   ),
                   child: const Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.history_toggle_off, size: 48, color: AppTheme.primaryNavyLight),
+                      Icon(Icons.history_toggle_off, size: 48, color: Color(0xFF64748B)),
                       SizedBox(height: 12),
-                      Text('No readings match your filter criteria.', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text('No readings match your filter criteria.', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF94A3B8))),
                     ],
                   ),
                 )
@@ -177,11 +179,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
                     return Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: const Color(0xFF1E293B),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppTheme.borderColor),
+                        border: Border.all(color: const Color(0xFF334155)),
                         boxShadow: [
-                          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 4, offset: const Offset(0, 2)),
+                          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 2)),
                         ],
                       ),
                       child: ListTile(
@@ -215,7 +217,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           children: [
                             Text(
                               '${reading.estimatedH2sPpm.toStringAsFixed(1)} ppm',
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppTheme.primaryNavy),
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.white),
                             ),
                             const SizedBox(width: 6),
                             Text(
@@ -226,7 +228,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             Flexible(
                               child: Text(
                                 '• ${worker?.name ?? reading.workerId}',
-                                style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 12, fontWeight: FontWeight.w500),
+                                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.w500),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -236,7 +238,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           padding: const EdgeInsets.only(top: 4.0),
                           child: Text(
                             '${DateFormat('MMM dd, yyyy • HH:mm').format(reading.timestamp)} • ${reading.temperature.toStringAsFixed(0)}°C, ${reading.humidity.toStringAsFixed(0)}% RH • ${reading.exposureTime.toStringAsFixed(1)}h shift',
-                            style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 11.5),
+                            style: const TextStyle(color: Color(0xFF64748B), fontSize: 11.5),
                           ),
                         ),
                         trailing: Column(
@@ -272,17 +274,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildFilterChip(String label, int count) {
     final isSelected = _selectedRiskFilter == label;
-    final color = label == 'All' ? AppTheme.primaryNavy : _getRiskColor(label);
+    final color = label == 'All' ? const Color(0xFF38BDF8) : _getRiskColor(label);
 
     return GestureDetector(
       onTap: () => setState(() => _selectedRiskFilter = label),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? color : color.withValues(alpha: 0.08),
+          color: isSelected ? color.withValues(alpha: 0.25) : const Color(0xFF0F172A),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? color : color.withValues(alpha: 0.2),
+            color: isSelected ? color : const Color(0xFF334155),
           ),
         ),
         child: Row(
@@ -290,7 +292,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? Colors.white : color,
+                color: isSelected ? Colors.white : const Color(0xFF94A3B8),
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
               ),
@@ -299,13 +301,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.white.withValues(alpha: 0.2) : color.withValues(alpha: 0.15),
+                color: isSelected ? color.withValues(alpha: 0.4) : const Color(0xFF1E293B),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '$count',
                 style: TextStyle(
-                  color: isSelected ? Colors.white : color,
+                  color: isSelected ? Colors.white : const Color(0xFF64748B),
                   fontWeight: FontWeight.w900,
                   fontSize: 10,
                 ),

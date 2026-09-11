@@ -489,34 +489,54 @@ def validate_test_strip(image_bgr: np.ndarray) -> Dict[str, Any]:
         lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
         brightness = float(np.mean(gray))
         dynamic_range = float(np.max(gray) - np.min(gray))
+        aspect_ratio = w / float(h) if h > 0 else 1.0
 
         edges = cv2.Canny(gray, 50, 150)
         edge_density = float(np.count_nonzero(edges)) / float(edges.size)
 
-        # 1. Chemical Color Profile (30% weight) - Low/Medium saturation matching PbS
-        chem_color_score = float(np.clip((85.0 - mean_sat) / 60.0, 0.0, 1.0))
-        # 2. Paper Texture & Dye Fidelity (25% weight)
-        texture_score = float(np.clip((dynamic_range - 18.0) / 70.0, 0.0, 1.0)) * float(np.clip(1.0 - (edge_density / 0.12), 0.0, 1.0))
-        # 3. Focus Sharpness & Exposure (25% weight)
-        sharp_score = float(np.clip((lap_var - 20.0) / 100.0, 0.0, 1.0))
-        exp_score = float(np.clip(1.0 - abs(brightness - 140.0) / 110.0, 0.0, 1.0))
-        quality_strip_score = 0.55 * sharp_score + 0.45 * exp_score
-        # 4. Strip Aspect / Edge Contrast (20% weight)
-        aspect_ratio = w / float(h) if h > 0 else 1.0
-        ar_score = float(np.clip(0.70 + (0.30 if (aspect_ratio > 1.2 or aspect_ratio < 0.8) else 0.15), 0.0, 1.0))
-
+        # Negative checks & Guards against QR codes, random screenshots, faces, and scenes
         strip_reasons = []
-        # Negative guards
+
+        # 1. Reject if image is a QR code or barcode
+        try:
+            qr_detector = cv2.QRCodeDetector()
+            qr_found, _, _ = qr_detector.detectAndDecode(gray)
+            if qr_found or (dynamic_range > 180 and edge_density > 0.05 and (mean_sat < 15 and lap_var > 400)):
+                strip_reasons.append("Image is a QR Code or identification badge barcode, not an optical dosimeter sensor strip. Please scan QR codes in Step 1 (Worker Identification) and upload the physical exposure test strip in Step 3.")
+        except Exception:
+            pass
+
+        # 2. Reject synthetic solid / blank surfaces
         if dynamic_range < 25.0 and edge_density < 0.002:
-            strip_reasons.append("Plain synthetic solid surface (no test strip paper detected).")
-        if mean_sat > 90.0:
-            strip_reasons.append(f"Non-chemical vivid chromatic saturation ({mean_sat:.1f}).")
-        if edge_density > 0.070 or lap_var > 3500.0:
-            strip_reasons.append(f"Chaotic scene or UI text screenshot (High text sharpness / edge density: {edge_density:.3f}).")
-        if lap_var < 20.0:
-            strip_reasons.append(f"Image is out of focus / blurry (Sharpness: {lap_var:.1f}).")
-        if brightness < 20.0 or brightness > 248.0:
-            strip_reasons.append(f"Extreme underexposure or glare (Brightness: {brightness:.1f}).")
+            strip_reasons.append("Plain synthetic solid surface or blank image (no test strip paper texture detected).")
+
+        # 3. Reject non-chemical vivid saturation (e.g. colorful wallpapers, clothing, toys)
+        if mean_sat > 70.0:
+            strip_reasons.append(f"Non-chemical vivid chromatic saturation ({mean_sat:.1f}) detected. Authentic PbS dosimeters are neutral/tan/brown/gray.")
+
+        # 4. Reject chaotic scene, complex objects, human faces, or UI text
+        if edge_density > 0.045 or lap_var > 3000.0:
+            strip_reasons.append(f"Complex scene, face, or UI text screenshot detected (High edge complexity: {edge_density:.3f}).")
+
+        # 5. Reject blurry / out of focus images
+        if lap_var < 22.0:
+            strip_reasons.append(f"Image is out of focus / blurry (Sharpness: {lap_var:.1f}). Please capture a steady, well-focused photo.")
+
+        # 6. Reject extreme lighting conditions
+        if brightness < 35.0 or brightness > 240.0:
+            strip_reasons.append(f"Extreme lighting (Brightness: {brightness:.1f}). Please illuminate strip with uniform ambient lighting.")
+
+        # 7. Aspect ratio bounds for physical dosimeter strips
+        if aspect_ratio < 0.25 or aspect_ratio > 4.0:
+            strip_reasons.append(f"Unrealistic strip aspect ratio ({aspect_ratio:.2f}).")
+
+        # Scores
+        chem_color_score = float(np.clip((75.0 - mean_sat) / 55.0, 0.0, 1.0))
+        texture_score = float(np.clip((dynamic_range - 20.0) / 60.0, 0.0, 1.0)) * float(np.clip(1.0 - (edge_density / 0.040), 0.0, 1.0))
+        sharp_score = float(np.clip((lap_var - 22.0) / 100.0, 0.0, 1.0))
+        exp_score = float(np.clip(1.0 - abs(brightness - 145.0) / 95.0, 0.0, 1.0))
+        quality_strip_score = 0.55 * sharp_score + 0.45 * exp_score
+        ar_score = float(np.clip(1.0 - abs(aspect_ratio - 1.5) / 2.0, 0.20, 1.0))
 
         weighted_strip = (
             0.30 * chem_color_score +
@@ -526,13 +546,19 @@ def validate_test_strip(image_bgr: np.ndarray) -> Dict[str, Any]:
         )
 
         if len(strip_reasons) > 0:
-            final_score = min(weighted_strip, 0.45)
+            final_score = float(np.clip(weighted_strip * 0.40, 0.0, 0.45))
             status = "Invalid"
             is_valid = False
-            user_msg = strip_reasons[0]
+            user_msg = f"❌ {strip_reasons[0]}"
             all_reasons = strip_reasons
+        elif weighted_strip < 0.60:
+            final_score = float(np.clip(weighted_strip, 0.0, 0.59))
+            status = "Invalid"
+            is_valid = False
+            user_msg = "❌ Image failed physical dosimeter strip texture & optical verification."
+            all_reasons = ["Image failed physical dosimeter strip texture & optical verification."]
         else:
-            final_score = float(np.clip(0.85 + 0.10 * weighted_strip, 0.85, 0.95))
+            final_score = float(np.clip(0.80 + 0.15 * weighted_strip, 0.80, 0.95))
             status = "Valid"
             is_valid = True
             user_msg = "✅ Valid Physical Chemical Test Strip (Textured / Plain Paper) Verified."
@@ -541,11 +567,11 @@ def validate_test_strip(image_bgr: np.ndarray) -> Dict[str, Any]:
         confidence_pct = int(round(final_score * 100))
 
         # Adjust component scores for UI breakdown
-        ref_score = 0.90 if is_valid else 0.25
+        ref_score = 0.90 if is_valid else 0.15
         h2s_score = chem_color_score
         layout_score = ar_score
         quality_score = quality_strip_score
-        hum_score = 0.90 if is_valid else 0.30
+        hum_score = 0.90 if is_valid else 0.20
         plaus_score = texture_score
 
     breakdown = {

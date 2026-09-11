@@ -369,12 +369,22 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   child: const Icon(Icons.document_scanner, color: AppTheme.safetyOrange, size: 28),
                 ),
                 const SizedBox(width: 14),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Optical Dosimeter Scan', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 20, fontWeight: FontWeight.bold)),
-                    const Text('Lead Acetate H₂S Chemical Colorimetry', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Optical Dosimeter Scan',
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 18, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const Text(
+                        'Lead Acetate H₂S Chemical Colorimetry',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -388,22 +398,31 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: workers.any((w) => w.workerId == _selectedWorkerId) ? _selectedWorkerId : 'W-101',
                     dropdownColor: const Color(0xFF1E293B),
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
                     decoration: InputDecoration(
                       labelText: 'Select Registered Worker',
                       labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
                       filled: true,
                       fillColor: const Color(0xFF0F172A),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF334155))),
                     ),
                     items: [
                       ...workers.map((w) => DropdownMenuItem(
                         value: w.workerId,
-                        child: Text('${w.workerId} - ${w.name} (${w.department})'),
+                        child: Text(
+                          '${w.workerId} - ${w.name} (${w.department})',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                       )),
-                      const DropdownMenuItem(value: 'CUSTOM', child: Text('Manual Custom ID Entry...')),
+                      const DropdownMenuItem(
+                        value: 'CUSTOM',
+                        child: Text('Manual Custom ID Entry...', overflow: TextOverflow.ellipsis, maxLines: 1),
+                      ),
                     ],
                     onChanged: (val) => setState(() => _selectedWorkerId = val ?? 'W-101'),
                   ),
@@ -440,7 +459,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         child: _buildModeTab(
                           '🧪 Standalone Strip',
                           'STANDALONE_CHEMICAL_STRIP',
-                          'Direct paper crop (smooth & textured)',
+                          'Direct paper crop',
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -448,7 +467,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         child: _buildModeTab(
                           '🏷️ Full Badge',
                           'FULL_DOSEBAND_BADGE',
-                          'Full badge with 5-step scale',
+                          'Full badge 5-step',
                         ),
                       ),
                     ],
@@ -567,16 +586,22 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
-                              Icon(_latestResult!.isValid ? Icons.verified : Icons.error_outline, color: _latestResult!.isValid ? const Color(0xFF34D399) : const Color(0xFFF87171)),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Test Strip: ${_latestResult!.status.toUpperCase()} (${_latestResult!.confidencePct}%)',
-                                style: TextStyle(color: _latestResult!.isValid ? const Color(0xFF34D399) : const Color(0xFFF87171), fontWeight: FontWeight.bold, fontSize: 14),
-                              ),
-                            ],
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Icon(_latestResult!.isValid ? Icons.verified : Icons.error_outline, color: _latestResult!.isValid ? const Color(0xFF34D399) : const Color(0xFFF87171), size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Test Strip: ${_latestResult!.status.toUpperCase()} (${_latestResult!.confidencePct}%)',
+                                    style: TextStyle(color: _latestResult!.isValid ? const Color(0xFF34D399) : const Color(0xFFF87171), fontWeight: FontWeight.bold, fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
@@ -629,7 +654,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       children: [
                         SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)),
                         SizedBox(width: 12),
-                        Text('Analyzing Dosimeter Strip...', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text('Analyzing Dosimeter Strip...', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
                       ],
                     )
                   : const Row(
@@ -637,7 +662,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       children: [
                         Icon(Icons.analytics_outlined, color: Colors.white),
                         SizedBox(width: 8),
-                        Text('🔍 Analyze Dosimeter Badge', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text('🔍 Analyze Dosimeter Badge', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
                       ],
                     ),
             ),
@@ -651,14 +676,20 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: const Border(left: BorderSide(color: AppTheme.safetyOrange, width: 4)),
               ),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                children: const [
                   Row(
                     children: [
                       Icon(Icons.shield_outlined, color: AppTheme.safetyOrange, size: 18),
                       SizedBox(width: 6),
-                      Text('Mandatory Chemical & Laboratory Safety Protocol', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      Expanded(
+                        child: Text(
+                          'Mandatory Chemical & Safety Protocol',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                   SizedBox(height: 6),
@@ -690,7 +721,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
             children: [
               Icon(icon, color: AppTheme.safetyOrange, size: 20),
               const SizedBox(width: 8),
-              Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -714,7 +751,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: TextStyle(color: isSelected ? AppTheme.safetyOrange : Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+            Text(label, style: TextStyle(color: isSelected ? AppTheme.safetyOrange : Colors.white, fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis),
             const SizedBox(height: 2),
             Text(subtitle, style: const TextStyle(color: Color(0xFF64748B), fontSize: 9.5), maxLines: 1, overflow: TextOverflow.ellipsis),
           ],
@@ -739,7 +776,14 @@ class _ScannerScreenState extends State<ScannerScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
               Text(valueText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
             ],
           ),
@@ -775,7 +819,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5, fontWeight: FontWeight.bold), maxLines: 1),
+          Text(title, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 2),
           Text(
             isOk ? '✅ $statusText' : '❌ Failed',
