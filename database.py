@@ -108,6 +108,42 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
         """
     )
 
+    # Auto-migration for existing workers tables missing columns
+    cursor.execute("PRAGMA table_info(workers);")
+    existing_worker_cols = {row[1] for row in cursor.fetchall()}
+    worker_migration_cols = [
+        ("work_zone", "TEXT DEFAULT 'Zone A - General Area'"),
+        ("badge_id", "TEXT DEFAULT ''"),
+        ("badge_issue_date", "TEXT DEFAULT ''"),
+        ("badge_expiry_date", "TEXT DEFAULT ''"),
+        ("status", "TEXT DEFAULT 'Active'")
+    ]
+    for col_name, col_type in worker_migration_cols:
+        if col_name not in existing_worker_cols:
+            cursor.execute(f"ALTER TABLE workers ADD COLUMN {col_name} {col_type};")
+
+    # Update any workers where badge_id or dates are empty
+    today = date.today()
+    issue_date_str = (today - timedelta(days=30)).isoformat()
+    expiry_date_str = (today + timedelta(days=60)).isoformat()
+
+    cursor.execute("SELECT worker_id, badge_id, work_zone, badge_issue_date, badge_expiry_date FROM workers;")
+    for w_code, b_id, w_zone, b_issue, b_exp in cursor.fetchall():
+        new_bid = b_id if b_id else f"BDG-{str(w_code).replace('W-', '')}"
+        new_zone = w_zone if w_zone and w_zone != '' else "Zone A - General Area"
+        new_issue = b_issue if b_issue and b_issue != '' else issue_date_str
+        new_exp = b_exp if b_exp and b_exp != '' else expiry_date_str
+
+        if not b_id or not b_issue or not b_exp or not w_zone:
+            cursor.execute(
+                """
+                UPDATE workers
+                SET badge_id = ?, work_zone = ?, badge_issue_date = ?, badge_expiry_date = ?
+                WHERE worker_id = ?;
+                """,
+                (new_bid, new_zone, new_issue, new_exp, w_code)
+            )
+
     conn.commit()
 
     # Seed default workers if table is empty

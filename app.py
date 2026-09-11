@@ -346,16 +346,17 @@ elif page == "Scan Strip":
                 df_workers_avail = database.get_all_workers()
                 if not df_workers_avail.empty:
                     sample_qr_opts = [
-                        f"{r['worker_id']} — {r['name']} (Badge: {r['badge_id']})"
+                        f"{r['worker_id']} — {r['name']} (Badge: {r['badge_id'] if 'badge_id' in r and pd.notna(r['badge_id']) and r['badge_id'] else 'BDG-' + str(r['worker_id']).replace('W-', '')})"
                         for _, r in df_workers_avail.iterrows()
                     ]
                     selected_sample_worker = st.selectbox("Select Worker Badge to Test:", sample_qr_opts)
                     sel_wid = selected_sample_worker.split(" — ")[0].strip()
                     sample_w_profile = database.get_worker_by_id(sel_wid)
                     if sample_w_profile:
+                        badge_val = sample_w_profile.get("badge_id") or f"BDG-{sample_w_profile['worker_id'].replace('W-', '')}"
                         qr_bytes_input = qr_manager.generate_badge_qr_png(
                             sample_w_profile["worker_id"],
-                            sample_w_profile["badge_id"]
+                            badge_val
                         )
                         st.image(qr_bytes_input, caption=f"Simulated QR for {sample_w_profile['name']}", width=160)
                 else:

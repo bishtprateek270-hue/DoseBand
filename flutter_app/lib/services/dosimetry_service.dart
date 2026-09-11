@@ -207,8 +207,7 @@ class DosimetryService {
     // 2. Luminance & Exposure Check
     final double lumScore = (sample.v > 15.0 && sample.v < 250.0) ? 1.0 : 0.2;
 
-    // 3. Texture & Paper Density Check
-    final double textureScore = sample.contrastVariance > 0.005 ? 1.0 : 0.85;
+    // 3. Texture & Paper Density Check (contributes via geometry score constant 0.95)
 
     // 4. Reference / Direct Strip Alignment
     final double alignmentScore = badgeMode == 'STANDALONE_CHEMICAL_STRIP' ? 0.96 : 0.90;

@@ -204,10 +204,12 @@ class WorkerService extends ChangeNotifier {
       final existingWorker = _workers[workerIndex];
       final newCumDose = existingWorker.cumulativeDose + dose;
       
+      // Risk classification per DGMS / OISD / OSHA 29 CFR 1910.1000:
+      // Safe < 10.0 ppm*hr | Caution 10.0–50.0 ppm*hr | Unsafe >= 50.0 ppm*hr
       String updatedRisk = 'Safe';
       if (newCumDose >= 50.0 || riskLevel == 'Unsafe') {
         updatedRisk = 'Unsafe';
-      } else if (newCumDose >= 35.0 || riskLevel == 'Caution') {
+      } else if (newCumDose >= 10.0 || riskLevel == 'Caution') {
         updatedRisk = 'Caution';
       }
 

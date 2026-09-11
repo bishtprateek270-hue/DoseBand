@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/worker_service.dart';
 import '../theme/app_theme.dart';
 import 'worker_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({Key? key}) : super(key: key);
+  const HistoryScreen({super.key});
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -73,55 +74,54 @@ class _HistoryScreenState extends State<HistoryScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Dosimeter Scan History',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: AppTheme.primaryNavy,
-                      fontSize: 20,
-                    ),
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.primaryNavy,
+                  fontSize: 20,
+                  letterSpacing: -0.5,
+                ),
               ),
               const SizedBox(height: 2),
               const Text(
                 'Audit-ready record of all worker dosimeter readings',
-                style: TextStyle(color: AppTheme.primaryNavyLight, fontSize: 12),
+                style: TextStyle(color: AppTheme.primaryNavyLight, fontSize: 12, fontWeight: FontWeight.w500),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
               // Filter Row: Worker Dropdown & Risk Filter
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.borderColor),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.borderColor),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedWorkerFilter,
+                    isExpanded: true,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryNavy, size: 20),
+                    items: [
+                      const DropdownMenuItem(
+                        value: 'All',
+                        child: Text('Filter: All Workers', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                       ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedWorkerFilter,
-                          isExpanded: true,
-                          items: [
-                            const DropdownMenuItem(value: 'All', child: Text('Filter: All Workers', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
-                            ...workers.map((w) => DropdownMenuItem(
-                                  value: w.workerId,
-                                  child: Text('${w.workerId} (${w.name.split(' ').first})', style: const TextStyle(fontSize: 13)),
-                                )),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) setState(() => _selectedWorkerFilter = val);
-                          },
-                        ),
-                      ),
-                    ),
+                      ...workers.map((w) => DropdownMenuItem(
+                            value: w.workerId,
+                            child: Text('${w.workerId} - ${w.name}', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                          )),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setState(() => _selectedWorkerFilter = val);
+                    },
                   ),
-                ],
+                ),
               ),
               const SizedBox(height: 10),
 
@@ -153,20 +153,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(18),
                     border: Border.all(color: AppTheme.borderColor),
                   ),
-                  child: const Column(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.history_toggle_off, size: 48, color: AppTheme.primaryNavyLight),
+                    children: const [
+                      Icon(Icons.history_toggle_off_rounded, size: 44, color: AppTheme.primaryNavyLight),
                       SizedBox(height: 12),
-                      Text('No readings match your filter criteria.', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text('No readings match your filter criteria.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryNavy)),
                     ],
                   ),
                 )
               : ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
                   itemCount: filteredReadings.length,
                   separatorBuilder: (context, index) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
@@ -175,94 +175,106 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     final riskBg = _getRiskBgColor(reading.riskLevel);
                     final worker = _workerService.getWorkerById(reading.workerId);
 
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppTheme.borderColor),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 4, offset: const Offset(0, 2)),
-                        ],
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        onTap: () {
-                          if (worker != null) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => WorkerDetailScreen(workerId: worker.workerId),
-                              ),
-                            );
-                          }
-                        },
-                        leading: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: riskBg,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: riskColor.withValues(alpha: 0.3), width: 0.8),
+                    return InkWell(
+                      onTap: () {
+                        if (worker != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => WorkerDetailScreen(workerId: worker.workerId),
+                            ),
+                          );
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(18),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: reading.riskLevel == 'Unsafe' ? AppTheme.unsafeRed.withValues(alpha: 0.35) : AppTheme.borderColor,
+                            width: reading.riskLevel == 'Unsafe' ? 1.2 : 0.8,
                           ),
-                          child: Center(
-                            child: Text(
-                              reading.workerId,
-                              style: TextStyle(color: riskColor, fontWeight: FontWeight.w900, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        title: Row(
-                          children: [
-                            Flexible(
-                              flex: 0,
-                              child: Text(
-                                '${reading.estimatedH2sPpm.toStringAsFixed(1)} ppm',
-                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppTheme.primaryNavy),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              flex: 0,
-                              child: Text(
-                                '(${reading.dose.toStringAsFixed(1)} ppm·hr)',
-                                style: const TextStyle(color: AppTheme.safetyOrange, fontWeight: FontWeight.w700, fontSize: 12),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                '• ${worker?.name ?? reading.workerId}',
-                                style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 12, fontWeight: FontWeight.w500),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 4, offset: const Offset(0, 2)),
                           ],
                         ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(
-                            '${DateFormat('MMM dd, yyyy • HH:mm').format(reading.timestamp)} • ${reading.temperature.toStringAsFixed(0)}°C, ${reading.humidity.toStringAsFixed(0)}% RH • ${reading.exposureTime.toStringAsFixed(1)}h shift',
-                            style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 11.5),
-                          ),
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Worker ID Badge
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              width: 48,
+                              height: 48,
                               decoration: BoxDecoration(
                                 color: riskBg,
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: riskColor.withValues(alpha: 0.25), width: 1.0),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  reading.workerId,
+                                  style: TextStyle(color: riskColor, fontWeight: FontWeight.w900, fontSize: 11.5),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+
+                            // Main Details (Never overflows)
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        '${reading.estimatedH2sPpm.toStringAsFixed(1)} ppm',
+                                        style: GoogleFonts.inter(fontWeight: FontWeight.w900, fontSize: 15, color: AppTheme.primaryNavy),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '(${reading.dose.toStringAsFixed(1)} ppm·hr)',
+                                        style: const TextStyle(color: AppTheme.safetyOrange, fontWeight: FontWeight.w700, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    worker?.name ?? reading.workerId,
+                                    style: const TextStyle(color: AppTheme.primaryNavy, fontWeight: FontWeight.w600, fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    DateFormat('MMM dd, yyyy • HH:mm').format(reading.timestamp),
+                                    style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 11, fontWeight: FontWeight.w500),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${reading.temperature.toStringAsFixed(0)}°C, ${reading.humidity.toStringAsFixed(0)}% RH • ${reading.exposureTime.toStringAsFixed(1)}h shift',
+                                    style: const TextStyle(color: AppTheme.primaryNavyLight, fontSize: 10.5),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+
+                            // Risk Pill
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                              decoration: BoxDecoration(
+                                color: riskBg,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: riskColor.withValues(alpha: 0.3), width: 0.8),
                               ),
                               child: Text(
                                 reading.riskLevel.toUpperCase(),
                                 style: TextStyle(
                                   color: riskColor,
                                   fontWeight: FontWeight.w900,
-                                  fontSize: 10,
+                                  fontSize: 9.5,
                                   letterSpacing: 0.4,
                                 ),
                               ),
@@ -282,38 +294,45 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final isSelected = _selectedRiskFilter == label;
     final color = label == 'All' ? AppTheme.primaryNavy : _getRiskColor(label);
 
-    return GestureDetector(
+    return InkWell(
       onTap: () => setState(() => _selectedRiskFilter = label),
-      child: Container(
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? color : color.withValues(alpha: 0.08),
+          color: isSelected ? color : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? color : color.withValues(alpha: 0.2),
+            color: isSelected ? color : AppTheme.borderColor,
+            width: 1.0,
           ),
+          boxShadow: isSelected
+              ? [BoxShadow(color: color.withValues(alpha: 0.25), blurRadius: 6, offset: const Offset(0, 2))]
+              : [],
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? Colors.white : color,
-                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.white : AppTheme.primaryNavy,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                 fontSize: 12,
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 5),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.white.withValues(alpha: 0.2) : color.withValues(alpha: 0.15),
+                color: isSelected ? Colors.white.withValues(alpha: 0.22) : AppTheme.scaffoldBg,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '$count',
                 style: TextStyle(
-                  color: isSelected ? Colors.white : color,
+                  color: isSelected ? Colors.white : AppTheme.primaryNavyLight,
                   fontWeight: FontWeight.w900,
                   fontSize: 10,
                 ),

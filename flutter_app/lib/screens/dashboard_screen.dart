@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/worker_service.dart';
 import '../theme/app_theme.dart';
 import 'worker_detail_screen.dart';
@@ -75,11 +76,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final riskBg = _getRiskBgColor(activeWorker.riskLevel);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 18.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top Header & Worker Selector (Wrapped to prevent overflow)
+          // Top Header & Worker Selector
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -89,7 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Text(
                       'Overview',
-                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(fontSize: 22, fontWeight: FontWeight.w800),
+                      style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: AppTheme.primaryNavy, letterSpacing: -0.6),
                     ),
                     const SizedBox(height: 2),
                     const Text(
@@ -101,58 +102,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 130),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppTheme.borderColor),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6, offset: const Offset(0, 2)),
-                    ],
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: workers.any((w) => w.workerId == _selectedWorkerId) ? _selectedWorkerId : workers.first.workerId,
-                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryNavy, size: 20),
-                      items: workers.map((w) {
-                        return DropdownMenuItem<String>(
-                          value: w.workerId,
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: _getRiskColor(w.riskLevel),
-                                  shape: BoxShape.circle,
-                                ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.borderColor),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6, offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    isDense: true,
+                    value: workers.any((w) => w.workerId == _selectedWorkerId) ? _selectedWorkerId : workers.first.workerId,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryNavy, size: 20),
+                    items: workers.map((w) {
+                      return DropdownMenuItem<String>(
+                        value: w.workerId,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: _getRiskColor(w.riskLevel),
+                                shape: BoxShape.circle,
                               ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  w.workerId,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryNavy),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedWorkerId = val);
-                      },
-                    ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              w.workerId,
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppTheme.primaryNavy),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => _selectedWorkerId = val);
+                    },
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
 
           // Overview Summary Cards Row
           Row(
@@ -180,12 +176,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
 
           // Active Risk Banner (If unsafe)
           if (activeWorker.riskLevel == 'Unsafe' || activeWorker.cumulativeDose >= unsafeThreshold)
             Container(
-              margin: const EdgeInsets.only(bottom: 18),
+              margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: AppTheme.unsafeRedBg,
@@ -200,7 +196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       color: AppTheme.unsafeRed.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.error_outline_rounded, color: AppTheme.unsafeRed, size: 24),
+                    child: const Icon(Icons.error_outline_rounded, color: AppTheme.unsafeRed, size: 22),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -214,8 +210,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 2),
                         const Text(
-                          'Dose exceeded 50.0 ppm*hr threshold. Mandatory hold & safety evaluation required.',
-                          style: TextStyle(fontSize: 11, color: AppTheme.primaryNavy),
+                          'Exceeded DGMS/OSHA 50.0 ppm·hr limit. Immediate medical review required.',
+                          style: TextStyle(fontSize: 11, color: AppTheme.primaryNavy, height: 1.3),
                         ),
                       ],
                     ),
@@ -230,11 +226,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(color: riskColor.withValues(alpha: 0.3), width: 1.2),
               boxShadow: [
                 BoxShadow(
-                  color: riskColor.withValues(alpha: 0.08),
+                  color: riskColor.withValues(alpha: 0.06),
                   blurRadius: 20,
                   offset: const Offset(0, 6),
                 ),
@@ -251,7 +247,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           Text(
                             activeWorker.name,
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: AppTheme.primaryNavy, letterSpacing: -0.3),
+                            style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 18, color: AppTheme.primaryNavy, letterSpacing: -0.4),
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
@@ -265,10 +261,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: riskBg,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: riskColor.withValues(alpha: 0.3), width: 0.8),
                       ),
                       child: Text(
@@ -290,29 +286,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   alignment: Alignment.center,
                   children: [
                     SizedBox(
-                      height: 150,
-                      width: 150,
+                      height: 156,
+                      width: 156,
                       child: CircularProgressIndicator(
                         value: progress,
-                        backgroundColor: AppTheme.borderColor.withValues(alpha: 0.6),
+                        backgroundColor: const Color(0xFFF1F5F9),
                         color: riskColor,
-                        strokeWidth: 14,
+                        strokeWidth: 13,
                         strokeCap: StrokeCap.round,
                       ),
                     ),
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            activeWorker.cumulativeDose.toStringAsFixed(1),
-                            style: TextStyle(
-                              fontSize: 34,
-                              fontWeight: FontWeight.w900,
-                              color: riskColor,
-                              letterSpacing: -1.0,
-                            ),
+                        Text(
+                          activeWorker.cumulativeDose.toStringAsFixed(1),
+                          style: GoogleFonts.inter(
+                            fontSize: 34,
+                            fontWeight: FontWeight.w900,
+                            color: riskColor,
+                            letterSpacing: -1.2,
                           ),
                         ),
                         const Text(
@@ -323,19 +316,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.shield_outlined, size: 14, color: AppTheme.primaryNavyLight),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Safe Threshold: ${unsafeThreshold.toStringAsFixed(0)} ppm*hr',
-                      style: const TextStyle(fontSize: 11, color: AppTheme.primaryNavyLight, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
                 const SizedBox(height: 16),
+                
+                // Standards compliant threshold label
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.scaffoldBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.shield_outlined, size: 13, color: riskColor),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Unsafe Threshold: 50.0 ppm·hr',
+                        style: TextStyle(fontSize: 11, color: AppTheme.primaryNavy, fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -362,7 +366,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 22),
 
           // Weekly Exposure Trend Section
           Row(
@@ -370,7 +374,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: const [
               Text(
                 'Weekly Dosimeter Trend',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.primaryNavy, letterSpacing: -0.2),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.primaryNavy, letterSpacing: -0.3),
               ),
               Text(
                 '7-Day Average',
@@ -378,11 +382,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
 
           Container(
             height: 210,
-            padding: const EdgeInsets.only(top: 20, right: 20, left: 8, bottom: 8),
+            padding: const EdgeInsets.only(top: 20, right: 18, left: 8, bottom: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
@@ -397,7 +401,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   show: true,
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (value) => FlLine(
-                    color: AppTheme.borderColor.withValues(alpha: 0.5),
+                    color: AppTheme.borderColor.withValues(alpha: 0.6),
                     strokeWidth: 0.8,
                   ),
                 ),
@@ -452,6 +456,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       FlSpot(6, 44.5),
                     ],
                     isCurved: true,
+                    curveSmoothness: 0.35,
                     color: AppTheme.accentIndigo,
                     barWidth: 3,
                     isStrokeCapRound: true,
@@ -470,7 +475,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          AppTheme.accentIndigo.withValues(alpha: 0.25),
+                          AppTheme.accentIndigo.withValues(alpha: 0.22),
                           AppTheme.accentIndigo.withValues(alpha: 0.0),
                         ],
                       ),
@@ -502,7 +507,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppTheme.borderColor),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 6, offset: const Offset(0, 2)),
@@ -536,7 +541,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             fit: BoxFit.scaleDown,
             child: Text(
               value,
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: accentColor, letterSpacing: -0.5),
+              style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: accentColor, letterSpacing: -0.5),
             ),
           ),
           const SizedBox(height: 2),
