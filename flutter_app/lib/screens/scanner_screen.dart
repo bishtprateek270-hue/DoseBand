@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/worker.dart';
 import '../services/worker_service.dart';
 import '../services/dosimetry_service.dart';
+import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 
 class ScannerScreen extends StatefulWidget {
@@ -16,6 +17,7 @@ class ScannerScreen extends StatefulWidget {
 class _ScannerScreenState extends State<ScannerScreen> {
   final WorkerService _workerService = WorkerService();
   final DosimetryService _dosimetryService = DosimetryService();
+  final ApiService _apiService = ApiService();
   final ImagePicker _picker = ImagePicker();
 
   File? _image;
@@ -27,7 +29,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
   bool _isQrVerified = false;
 
   // Step 2: Image Source state
-  String _imageSourceMode = 'UPLOAD'; // 'UPLOAD' | 'CAMERA'
+  String _imageSourceMode = 'GALLERY'; // 'GALLERY' | 'CAMERA'
+
+  // Step 3: Environmental & Shift Inputs (Matching Web App)
+  double _temperatureC = 25.0;
+  double _exposureTimeHours = 1.0;
+  double _humidityRh = 50.0;
+  String _badgeMode = 'STANDALONE_CHEMICAL_STRIP';
 
   // Pre-flight validation result
   DosimetryResult? _latestResult;
@@ -49,62 +57,74 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   Future<void> _getImage(ImageSource source) async {
-    final XFile? pickedFile = await _picker.pickImage(source: source);
-    if (pickedFile != null) {
-      final file = File(pickedFile.path);
-      setState(() {
-        _image = file;
-        _isAnalyzing = true;
-      });
+    try {
+      final XFile? pickedFile = await _picker.pickImage(source: source);
+      if (pickedFile != null) {
+        final file = File(pickedFile.path);
+        setState(() {
+          _image = file;
+          _isAnalyzing = true;
+        });
 
-      // Run pre-flight optical validation
-      final result = await _dosimetryService.analyzeImage(
-        imageFile: file,
-        temperatureC: 25.0,
-        humidityRh: 50.0,
-        exposureTimeHours: 1.0,
-        badgeMode: 'STANDALONE_CHEMICAL_STRIP',
-      );
+        // Run optical pre-flight validation via API backend
+        final result = await _dosimetryService.analyzeImage(
+          imageFile: file,
+          workerId: _selectedWorkerId,
+          temperatureC: _temperatureC,
+          humidityRh: _humidityRh,
+          exposureTimeHours: _exposureTimeHours,
+          badgeMode: _badgeMode,
+        );
 
-      setState(() {
-        _latestResult = result;
-        _isAnalyzing = false;
-      });
+        setState(() {
+          _latestResult = result;
+          _isAnalyzing = false;
+        });
+      }
+    } catch (e) {
+      setState(() => _isAnalyzing = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Image acquisition note: $e'),
+            backgroundColor: AppTheme.cautionYellow,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _scanAndVerifyQr(ImageSource source) async {
-    final XFile? pickedFile = await _picker.pickImage(source: source);
-    if (pickedFile != null) {
-      final fileName = pickedFile.name.toLowerCase();
-      // Check if this is an official DoseBand badge
-      final workers = _workerService.workers;
-      Worker? matchedWorker;
-      for (final w in workers) {
-        if (fileName.contains(w.workerId.toLowerCase()) || fileName.contains(w.badgeId.toLowerCase())) {
-          matchedWorker = w;
-          break;
-        }
-      }
+    try {
+      final XFile? pickedFile = await _picker.pickImage(source: source);
+      if (pickedFile != null) {
+        final bytes = await pickedFile.readAsBytes();
+        final res = await _apiService.verifyBadgeQr(imageBytes: bytes);
 
-      if (matchedWorker != null) {
-        setState(() {
-          _selectedWorkerId = matchedWorker!.workerId;
-          _isQrVerified = true;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ Official DoseBand Badge Verified Successfully for ${matchedWorker.name} (${matchedWorker.workerId})!'),
-              backgroundColor: AppTheme.safeGreen,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+        if (res['valid'] == true && res['worker'] != null) {
+          final w = res['worker'] as Map<String, dynamic>;
+          final wid = w['worker_id']?.toString() ?? 'W-101';
+          setState(() {
+            _selectedWorkerId = wid;
+            _isQrVerified = true;
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✅ Official DoseBand Badge Verified for ${w['name']} ($wid)!'),
+                backgroundColor: AppTheme.safeGreen,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        } else {
+          _showForeignQrRejectedDialog(res['raw_payload']?.toString() ?? 'Unrecognized QR code payload');
         }
-      } else {
-        // First worker fallback if testing, or reject foreign badge
-        _showForeignQrRejectedDialog('https://example.com/unauthorized_external_qr');
       }
+    } catch (e) {
+      _showForeignQrRejectedDialog('https://unauthorized-external-code.com');
     }
   }
 
@@ -117,7 +137,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('✅ Official DoseBand Badge Verified Successfully for ${worker?.name ?? workerId} ($workerId)!'),
+        content: Text('✅ Official DoseBand Badge Verified for ${worker?.name ?? workerId} ($workerId)!'),
         backgroundColor: AppTheme.safeGreen,
         behavior: SnackBarBehavior.floating,
       ),
@@ -170,9 +190,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Intercepted Raw Payload:', style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.bold)),
+                  const Text('Intercepted Payload:', style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text(payload, style: const TextStyle(color: Color(0xFFF87171), fontSize: 12, fontFamily: 'monospace')),
+                  Text(payload, style: const TextStyle(color: Color(0xFFF87171), fontSize: 11, fontFamily: 'monospace')),
                 ],
               ),
             ),
@@ -203,7 +223,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     if (worker != null && worker.isBadgeExpired) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('🚨 Worker badge is EXPIRED. Replace badge before logging exposure.'),
+          content: Text('🚨 Worker badge is EXPIRED. Replace badge before recording exposure.'),
           backgroundColor: AppTheme.unsafeRed,
           behavior: SnackBarBehavior.floating,
         ),
@@ -214,10 +234,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     final result = await _dosimetryService.analyzeImage(
       imageFile: _image!,
-      temperatureC: 25.0,
-      humidityRh: 50.0,
-      exposureTimeHours: 1.0,
-      badgeMode: 'STANDALONE_CHEMICAL_STRIP',
+      workerId: _selectedWorkerId,
+      temperatureC: _temperatureC,
+      humidityRh: _humidityRh,
+      exposureTimeHours: _exposureTimeHours,
+      badgeMode: _badgeMode,
     );
 
     setState(() {
@@ -238,7 +259,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       return;
     }
 
-    // Save reading to worker service
+    // Save reading to SQLite via backend API & worker service
     _workerService.addReading(
       workerId: _selectedWorkerId,
       dose: result.cumulativeDosePpmH,
@@ -249,11 +270,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
           ? 'EXPIRED — Replace badge'
           : 'Active & Verified',
       estimatedH2sPpm: result.estimatedH2sPpm,
-      exposureTime: 1.0,
-      temperature: 25.0,
-      humidity: 50.0,
-      badgeMode: 'STANDALONE_CHEMICAL_STRIP',
-      dataSource: 'CALIBRATED_OPTICAL_DOSIMETRY_MODEL',
+      exposureTime: _exposureTimeHours,
+      temperature: _temperatureC,
+      humidity: _humidityRh,
+      badgeMode: result.badgeMode,
+      dataSource: result.dataSource,
       confidencePct: result.confidencePct,
       actionGuidance: result.actionGuidance,
     );
@@ -301,160 +322,138 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   border: Border.all(color: const Color(0xFF334155)),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    CircleAvatar(
+                      backgroundColor: AppTheme.safetyOrange,
+                      radius: 18,
+                      child: Text(workerId.replaceAll('W-', ''), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Worker: ${worker?.name ?? workerId}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15), overflow: TextOverflow.ellipsis),
-                          const SizedBox(height: 2),
-                          Text('ID: $workerId | ${worker?.department ?? "Operations"}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12), overflow: TextOverflow.ellipsis),
+                          Text(worker?.name ?? 'Worker $workerId', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text('${worker?.department ?? "Operations"} • ${worker?.workZone ?? "Zone A"}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text('VERIFIED', style: TextStyle(color: Color(0xFF34D399), fontWeight: FontWeight.bold, fontSize: 11)),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(color: riskColor.withOpacity(0.2), borderRadius: BorderRadius.circular(999)),
+                      child: Text(result.riskLevel.toUpperCase(), style: TextStyle(color: riskColor, fontSize: 11, fontWeight: FontWeight.w800)),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
 
-              // Metrics Grid
+              // Predicted H2S and Cumulative Exposure KPIs
               Row(
                 children: [
                   Expanded(
-                    child: _buildMetricCard(
-                      'H₂S Concentration',
-                      '${result.estimatedH2sPpm.toStringAsFixed(2)} ppm',
-                      riskColor,
-                      Icons.science,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF334155)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Estimated H₂S Gas', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text('${result.estimatedH2sPpm.toStringAsFixed(2)} ppm', style: TextStyle(color: riskColor, fontSize: 20, fontWeight: FontWeight.w900)),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: _buildMetricCard(
-                      'Cumulative Dose',
-                      '${result.cumulativeDosePpmH.toStringAsFixed(2)} ppm·hr',
-                      AppTheme.safetyOrange,
-                      Icons.timer,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF334155)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Shift Cumulative Dose', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text('${result.cumulativeDosePpmH.toStringAsFixed(2)} ppm•h', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildMetricCard(
-                      'Total Exposure',
-                      '${(worker?.cumulativeDose ?? result.cumulativeDosePpmH).toStringAsFixed(1)} ppm·hr',
-                      Colors.white,
-                      Icons.person,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _buildMetricCard(
-                      'Optical Staining',
-                      '${(result.rawIntensity * 100).toStringAsFixed(1)}%',
-                      const Color(0xFF38BDF8),
-                      Icons.opacity,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
-              // Risk Classification Banner
+              // Optical Densitometry Breakdown
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: riskColor.withValues(alpha: 0.15),
+                  color: const Color(0xFF1E293B),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: riskColor),
+                  border: Border.all(color: const Color(0xFF334155)),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('RISK CLASSIFICATION', style: TextStyle(color: riskColor, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5)),
-                        Text(result.riskLevel.toUpperCase(), style: TextStyle(color: riskColor, fontWeight: FontWeight.w900, fontSize: 14)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(result.actionGuidance, style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 12, height: 1.3)),
+                    _buildModalRow('Validation Confidence', '${result.confidencePct}% (${result.status})'),
+                    const Divider(color: Color(0xFF334155), height: 16),
+                    _buildModalRow('Staining Intensity', result.rawIntensity.toStringAsFixed(4)),
+                    const Divider(color: Color(0xFF334155), height: 16),
+                    _buildModalRow('Environmental Factor', '${result.compensationFactor}x (${_temperatureC}°C, ${_humidityRh}%)'),
+                    const Divider(color: Color(0xFF334155), height: 16),
+                    _buildModalRow('Database Persistence', 'Saved to SQLite (doseband.db)'),
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
-              // Environmental parameters recorded
-              const Text(
-                'Calibration: Per-Channel OLS Light Correction • Passive Sensor Standard',
-                style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+              // Action Guidance Banner
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: riskColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: riskColor.withOpacity(0.4)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.health_and_safety_outlined, color: riskColor, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(result.actionGuidance, style: TextStyle(color: riskColor, fontSize: 12, height: 1.35, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              setState(() {
-                _image = null;
-                _latestResult = null;
-              });
-            },
-            child: const Text('Close & Reset', style: TextStyle(color: Color(0xFF94A3B8))),
-          ),
           ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.safetyOrange),
-            child: const Text('View History', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Acknowledge & Close', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMetricCard(String title, String value, Color valueColor, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF334155)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: const Color(0xFF94A3B8)),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w500),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(value, style: TextStyle(color: valueColor, fontWeight: FontWeight.bold, fontSize: 15)),
-        ],
-      ),
+  Widget _buildModalRow(String label, String val) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+        Text(val, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+      ],
     );
   }
 
@@ -464,352 +463,134 @@ class _ScannerScreenState extends State<ScannerScreen> {
     final worker = _workerService.getWorkerById(_selectedWorkerId);
 
     return Scaffold(
+      backgroundColor: AppTheme.backgroundDark,
+      appBar: AppBar(
+        title: const Text('Scan DoseBand Sensor', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 18)),
+        backgroundColor: AppTheme.surfaceCard,
+        elevation: 0,
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title Header (Exactly matching Web "Scan Sensor Strip")
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.safetyOrange.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.document_scanner, color: AppTheme.safetyOrange, size: 28),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Scan Sensor Strip',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 20, fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const Text(
-                        'Select a registered worker and provide a photo of the exposure wristband',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Step 1: Worker Identification (Exact Web Layout)
-            _buildSectionCard(
-              title: 'Step 1: Worker Identification',
-              icon: Icons.person_pin_circle,
+            // -----------------------------------------------------------------
+            // STEP 1: WORKER IDENTIFICATION
+            // -----------------------------------------------------------------
+            _buildSectionHeader('1', 'Worker Identification & Badge Verification'),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceCard,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ID Method Toggle Tabs
                   Row(
                     children: [
                       Expanded(
-                        child: _buildToggleTab(
-                          label: '📷 QR Badge Scan',
-                          isSelected: _idMethod == 'QR_AUTOMATED',
-                          onTap: () => setState(() => _idMethod = 'QR_AUTOMATED'),
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: _idMethod == 'QR_AUTOMATED' ? AppTheme.safetyOrange : AppTheme.borderColor),
+                            backgroundColor: _idMethod == 'QR_AUTOMATED' ? AppTheme.safetyOrange.withOpacity(0.12) : Colors.transparent,
+                          ),
+                          onPressed: () => setState(() => _idMethod = 'QR_AUTOMATED'),
+                          icon: const Icon(Icons.qr_code_scanner_rounded, size: 18, color: Colors.white),
+                          label: const Text('QR Badge', style: TextStyle(color: Colors.white, fontSize: 12)),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: _buildToggleTab(
-                          label: '📋 Manual Directory',
-                          isSelected: _idMethod == 'MANUAL_DIRECTORY',
-                          onTap: () => setState(() => _idMethod = 'MANUAL_DIRECTORY'),
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: _idMethod == 'MANUAL_DIRECTORY' ? AppTheme.safetyOrange : AppTheme.borderColor),
+                            backgroundColor: _idMethod == 'MANUAL_DIRECTORY' ? AppTheme.safetyOrange.withOpacity(0.12) : Colors.transparent,
+                          ),
+                          onPressed: () => setState(() => _idMethod = 'MANUAL_DIRECTORY'),
+                          icon: const Icon(Icons.badge_outlined, size: 18, color: Colors.white),
+                          label: const Text('Manual List', style: TextStyle(color: Colors.white, fontSize: 12)),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-
+                  const SizedBox(height: 12),
                   if (_idMethod == 'QR_AUTOMATED') ...[
                     Row(
                       children: [
                         Expanded(
-                          child: OutlinedButton.icon(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
                             onPressed: () => _scanAndVerifyQr(ImageSource.camera),
-                            icon: const Icon(Icons.qr_code_scanner, size: 16),
-                            label: const Text('Live Camera QR', style: TextStyle(fontSize: 12)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              side: const BorderSide(color: Color(0xFF334155)),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
+                            icon: const Icon(Icons.camera_alt_rounded, size: 16, color: AppTheme.safetyOrange),
+                            label: const Text('Camera QR Scan', style: TextStyle(color: Colors.white, fontSize: 12)),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: OutlinedButton.icon(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
                             onPressed: () => _scanAndVerifyQr(ImageSource.gallery),
-                            icon: const Icon(Icons.upload_file, size: 16),
-                            label: const Text('Upload QR', style: TextStyle(fontSize: 12)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              side: const BorderSide(color: Color(0xFF334155)),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _simulateQrScan('W-101'),
-                            icon: const Icon(Icons.verified_user_outlined, size: 16, color: AppTheme.safetyOrange),
-                            label: const Text('Sample QR', style: TextStyle(fontSize: 12, color: AppTheme.safetyOrange)),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: AppTheme.safetyOrange),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
+                            icon: const Icon(Icons.photo_library_outlined, size: 16, color: AppTheme.safetyOrange),
+                            label: const Text('Upload QR File', style: TextStyle(color: Colors.white, fontSize: 12)),
                           ),
                         ),
                       ],
                     ),
                   ] else ...[
                     DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      initialValue: workers.any((w) => w.workerId == _selectedWorkerId) ? _selectedWorkerId : 'W-101',
                       dropdownColor: const Color(0xFF1E293B),
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      value: workers.any((w) => w.workerId == _selectedWorkerId) ? _selectedWorkerId : (workers.isNotEmpty ? workers.first.workerId : null),
                       decoration: InputDecoration(
-                        labelText: 'Select Registered Worker*',
+                        labelText: 'Select Registered Worker',
                         labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
                         filled: true,
                         fillColor: const Color(0xFF0F172A),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF334155))),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      items: workers.map((w) => DropdownMenuItem(
-                        value: w.workerId,
-                        child: Text(
-                          '${w.workerId} — ${w.name} (${w.department} | ${w.workZone})',
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      )).toList(),
-                      onChanged: (val) => setState(() => _selectedWorkerId = val ?? 'W-101'),
+                      items: workers.map((w) {
+                        return DropdownMenuItem<String>(
+                          value: w.workerId,
+                          child: Text('${w.workerId} — ${w.name} (${w.department})', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedWorkerId = val);
+                      },
                     ),
                   ],
 
-                  const SizedBox(height: 14),
-
-                  // Rich Worker Profile Metadata Card (Matching Web UI)
-                  if (worker != null)
+                  // Verified Profile Tag
+                  if (worker != null) ...[
+                    const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: const Color(0xFF0F172A),
-                        borderRadius: BorderRadius.circular(12),
-                        border: const Border(
-                          left: BorderSide(color: Color(0xFF10B981), width: 4),
-                          top: BorderSide(color: Color(0xFF334155), width: 0.8),
-                          right: BorderSide(color: Color(0xFF334155), width: 0.8),
-                          bottom: BorderSide(color: Color(0xFF334155), width: 0.8),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '👤 ${worker.name} (${worker.workerId})',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981),
-                                  borderRadius: BorderRadius.circular(9999),
-                                ),
-                                child: Text(
-                                  _isQrVerified ? 'QR VERIFIED • ACTIVE' : 'ROSTER VERIFIED • ACTIVE',
-                                  style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w800),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '🏭 Dept: ${worker.department}  |  📍 Zone: ${worker.workZone}',
-                            style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '⏰ Shift: ${worker.shift}  |  🏷️ Badge ID: ${worker.badgeId}',
-                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Step 2: Provide Image (Exact Web Layout)
-            _buildSectionCard(
-              title: 'Step 2: Provide Image',
-              icon: Icons.camera_alt,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Image Mode Toggle Tabs
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildToggleTab(
-                          label: '📁 Upload Image File',
-                          isSelected: _imageSourceMode == 'UPLOAD',
-                          onTap: () => setState(() => _imageSourceMode = 'UPLOAD'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildToggleTab(
-                          label: '📷 Live Camera',
-                          isSelected: _imageSourceMode == 'CAMERA',
-                          onTap: () => setState(() => _imageSourceMode = 'CAMERA'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  if (_imageSourceMode == 'UPLOAD')
-                    OutlinedButton.icon(
-                      onPressed: () => _getImage(ImageSource.gallery),
-                      icon: const Icon(Icons.upload_file, size: 18),
-                      label: const Text('Select / Upload Image from Device'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Color(0xFF334155)),
-                        minimumSize: const Size(double.infinity, 44),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    )
-                  else
-                    OutlinedButton.icon(
-                      onPressed: () => _getImage(ImageSource.camera),
-                      icon: const Icon(Icons.camera_alt, size: 18),
-                      label: const Text('Capture Photo with Camera'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Color(0xFF334155)),
-                        minimumSize: const Size(double.infinity, 44),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Step 3: Badge Preview & Verification (Exact Web Layout)
-            _buildSectionCard(
-              title: 'Step 3: Badge Preview & Verification',
-              icon: Icons.verified_outlined,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Image Display Area
-                  Container(
-                    height: 200,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFF334155), width: 1.5),
-                    ),
-                    child: _image != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: Image.file(_image!, fit: BoxFit.contain),
-                          )
-                        : const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.add_photo_alternate_outlined, size: 44, color: Color(0xFF64748B)),
-                              SizedBox(height: 10),
-                              Text('No Dosimeter Strip Loaded', style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600)),
-                              SizedBox(height: 4),
-                              Text('Select image source in Step 2 to preview', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                            ],
-                          ),
-                  ),
-
-                  // Validation Status & Pre-Flight Cards
-                  if (_latestResult != null) ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: _latestResult!.isValid ? const Color(0xFF10B981).withValues(alpha: 0.12) : const Color(0xFFEF4444).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: _latestResult!.isValid ? const Color(0xFF10B981) : const Color(0xFFEF4444)),
+                        border: Border.all(color: worker.isBadgeExpired ? AppTheme.unsafeRed : AppTheme.safeGreen),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
+                          Icon(
+                            worker.isBadgeExpired ? Icons.cancel_outlined : Icons.check_circle_outline_rounded,
+                            color: worker.isBadgeExpired ? AppTheme.unsafeRed : AppTheme.safeGreen,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
                           Expanded(
-                            child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(_latestResult!.isValid ? Icons.verified : Icons.error_outline, color: _latestResult!.isValid ? const Color(0xFF34D399) : const Color(0xFFF87171), size: 18),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Test Strip: ${_latestResult!.status.toUpperCase()} (${_latestResult!.confidencePct}%)',
-                                    style: TextStyle(color: _latestResult!.isValid ? const Color(0xFF34D399) : const Color(0xFFF87171), fontWeight: FontWeight.bold, fontSize: 13),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
+                                Text('${worker.name} (${worker.workerId})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                Text('Badge: ${worker.effectiveBadgeId} • ${worker.isBadgeExpired ? "EXPIRED" : "ACTIVE"}', style: TextStyle(color: worker.isBadgeExpired ? AppTheme.unsafeRed : AppTheme.safeGreen, fontSize: 11)),
                               ],
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: _latestResult!.isValid ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              _latestResult!.isValid ? 'VERIFIED' : 'REJECTED',
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900),
-                            ),
-                          ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // 4 Diagnostic Pre-flight Checks (Matching Web UI)
-                    Row(
-                      children: [
-                        Expanded(child: _buildPreFlightIndicator('📌 Scale', 'Standard', true)),
-                        const SizedBox(width: 6),
-                        Expanded(child: _buildPreFlightIndicator('🧪 Sensor Strip', 'Verified Paper', _latestResult!.isValid)),
-                        const SizedBox(width: 6),
-                        Expanded(child: _buildPreFlightIndicator('💧 Humidity', 'Auto Standard', true)),
-                        const SizedBox(width: 6),
-                        Expanded(child: _buildPreFlightIndicator('💡 Lighting', 'Feasible', true)),
-                      ],
                     ),
                   ],
                 ],
@@ -817,147 +598,193 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Analyze Button
-            ElevatedButton(
-              onPressed: (_image != null && !_isAnalyzing && (_latestResult?.isValid ?? true))
-                  ? _runFullAnalysis
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.safetyOrange,
-                disabledBackgroundColor: const Color(0xFF334155),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 4,
-              ),
-              child: _isAnalyzing
-                  ? const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)),
-                        SizedBox(width: 12),
-                        Text('Analyzing Dosimeter Strip...', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-                      ],
-                    )
-                  : const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.analytics_outlined, color: Colors.white),
-                        SizedBox(width: 8),
-                        Text('🔍 Analyze Dosimeter Badge', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-            ),
-            const SizedBox(height: 24),
-
-            // Professional Safety Notice Card
+            // -----------------------------------------------------------------
+            // STEP 2: IMAGE ACQUISITION
+            // -----------------------------------------------------------------
+            _buildSectionHeader('2', 'Photograph Chemical Dosimeter Strip'),
+            const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(12),
-                border: const Border(left: BorderSide(color: AppTheme.safetyOrange, width: 4)),
+                color: AppTheme.surfaceCard,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.borderColor),
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Row(
                     children: [
-                      Icon(Icons.shield_outlined, color: AppTheme.safetyOrange, size: 18),
-                      SizedBox(width: 6),
                       Expanded(
-                        child: Text(
-                          'Mandatory Safety Protocol',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.safetyOrange),
+                          onPressed: () => _getImage(ImageSource.camera),
+                          icon: const Icon(Icons.camera_alt_rounded, color: Colors.white),
+                          label: const Text('Live Camera Photo', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(side: const BorderSide(color: AppTheme.borderColor)),
+                          onPressed: () => _getImage(ImageSource.gallery),
+                          icon: const Icon(Icons.photo_library_outlined, color: Colors.white),
+                          label: const Text('Upload Image', style: TextStyle(color: Colors.white)),
                         ),
                       ),
                     ],
                   ),
-                  SizedBox(height: 6),
-                  Text(
-                    'Hydrogen Sulfide (H₂S) and Lead Acetate handling must strictly be performed under expert supervision inside certified chemical fume hoods with calibrated PPE.',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5, height: 1.35),
+                  if (_image != null) ...[
+                    const SizedBox(height: 16),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(_image!, height: 180, width: double.infinity, fit: BoxFit.cover),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // -----------------------------------------------------------------
+            // STEP 3: ENVIRONMENTAL & OPERATIONAL PARAMETERS
+            // -----------------------------------------------------------------
+            _buildSectionHeader('3', 'Environmental & Shift Parameters'),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceCard,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Ambient Temp: ${_temperatureC.toStringAsFixed(0)}°C', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                            Slider(
+                              value: _temperatureC,
+                              min: 10.0,
+                              max: 50.0,
+                              divisions: 40,
+                              activeColor: AppTheme.safetyOrange,
+                              onChanged: (v) => setState(() => _temperatureC = v),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Shift Duration: ${_exposureTimeHours.toStringAsFixed(1)} h', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                            Slider(
+                              value: _exposureTimeHours,
+                              min: 0.5,
+                              max: 12.0,
+                              divisions: 23,
+                              activeColor: AppTheme.safetyOrange,
+                              onChanged: (v) => setState(() => _exposureTimeHours = v),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 20),
+
+            // -----------------------------------------------------------------
+            // PRE-FLIGHT VALIDATION & DIAGNOSTICS CARD
+            // -----------------------------------------------------------------
+            if (_latestResult != null) ...[
+              _buildSectionHeader('4', 'Pre-Flight Optical Verification'),
+              const SizedBox(height: 8),
+              _buildValidationCard(_latestResult!),
+              const SizedBox(height: 20),
+            ],
+
+            // -----------------------------------------------------------------
+            // ANALYZE BUTTON
+            // -----------------------------------------------------------------
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: (_image != null && !_isAnalyzing) ? AppTheme.safetyOrange : const Color(0xFF334155),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: (_image != null && !_isAnalyzing) ? _runFullAnalysis : null,
+                child: _isAnalyzing
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('🔍 Execute ML Dosimetry Analysis', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15)),
+              ),
+            ),
+            const SizedBox(height: 40),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSectionCard({required String title, required IconData icon, required Widget child}) {
+  Widget _buildSectionHeader(String stepNum, String title) {
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 11,
+          backgroundColor: AppTheme.safetyOrange,
+          child: Text(stepNum, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900)),
+        ),
+        const SizedBox(width: 8),
+        Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Widget _buildValidationCard(DosimetryResult res) {
+    final isValid = res.isValid;
+    final color = isValid ? AppTheme.safeGreen : AppTheme.unsafeRed;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: AppTheme.surfaceCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF334155)),
+        border: Border.all(color: color.withOpacity(0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icon, color: AppTheme.safetyOrange, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                  overflow: TextOverflow.ellipsis,
-                ),
+              Row(
+                children: [
+                  Icon(isValid ? Icons.verified_outlined : Icons.error_outline_rounded, color: color, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    isValid ? 'Optical Verification Passed (${res.confidencePct}%)' : 'Verification Rejected (${res.confidencePct}%)',
+                    style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: color.withOpacity(0.2), borderRadius: BorderRadius.circular(999)),
+                child: Text(res.status.toUpperCase(), style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToggleTab({required String label, required bool isSelected, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? AppTheme.safetyOrange.withValues(alpha: 0.18) : const Color(0xFF0F172A),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSelected ? AppTheme.safetyOrange : const Color(0xFF334155), width: isSelected ? 1.5 : 1.0),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(color: isSelected ? AppTheme.safetyOrange : Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPreFlightIndicator(String title, String statusText, bool isOk) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(8),
-        border: Border(left: BorderSide(color: isOk ? const Color(0xFF10B981) : const Color(0xFFEF4444), width: 3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 2),
-          Text(
-            isOk ? '✅ $statusText' : '❌ Failed',
-            style: TextStyle(color: isOk ? const Color(0xFF34D399) : const Color(0xFFF87171), fontSize: 9, fontWeight: FontWeight.w600),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+          const SizedBox(height: 8),
+          Text(res.userMessage, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
         ],
       ),
     );

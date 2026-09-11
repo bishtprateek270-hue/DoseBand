@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
-import 'screens/worker_directory_screen.dart';
 import 'screens/scanner_screen.dart';
+import 'screens/worker_directory_screen.dart';
 import 'screens/history_screen.dart';
+import 'screens/reports_screen.dart';
 import 'services/worker_service.dart';
 import 'theme/app_theme.dart';
 
@@ -53,9 +54,10 @@ class _MainNavigationState extends State<MainNavigation> {
 
   final List<Widget> _screens = const [
     DashboardScreen(),
-    WorkerDirectoryScreen(),
     ScannerScreen(),
+    WorkerDirectoryScreen(),
     HistoryScreen(),
+    ReportsScreen(),
   ];
 
   @override
@@ -171,6 +173,7 @@ class _MainNavigationState extends State<MainNavigation> {
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: (index) => setState(() => _currentIndex = index),
+          type: BottomNavigationBarType.fixed,
           backgroundColor: AppTheme.surfaceDeep,
           selectedItemColor: AppTheme.safetyOrange,
           unselectedItemColor: AppTheme.textFaint,
@@ -179,6 +182,11 @@ class _MainNavigationState extends State<MainNavigation> {
               icon: Icon(Icons.dashboard_outlined),
               activeIcon: Icon(Icons.dashboard),
               label: 'Dashboard',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.qr_code_scanner_outlined),
+              activeIcon: Icon(Icons.qr_code_scanner),
+              label: 'Scan Strip',
             ),
             BottomNavigationBarItem(
               icon: Badge(
@@ -196,14 +204,14 @@ class _MainNavigationState extends State<MainNavigation> {
               label: 'Roster',
             ),
             const BottomNavigationBarItem(
-              icon: Icon(Icons.qr_code_scanner_outlined),
-              activeIcon: Icon(Icons.qr_code_scanner),
-              label: 'Scan Strip',
-            ),
-            const BottomNavigationBarItem(
               icon: Icon(Icons.insert_chart_outlined_rounded),
               activeIcon: Icon(Icons.insert_chart_rounded),
               label: 'Logs',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.assessment_outlined),
+              activeIcon: Icon(Icons.assessment_rounded),
+              label: 'Reports',
             ),
           ],
         ),

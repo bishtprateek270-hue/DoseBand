@@ -41,41 +41,62 @@ class Reading {
     return {
       'id': id,
       'workerId': workerId,
+      'worker_id': workerId,
       'timestamp': timestamp.toIso8601String(),
       'dose': dose,
       'intensity': intensity,
       'riskLevel': riskLevel,
+      'risk_level': riskLevel,
       'isExpired': isExpired,
+      'is_expired': isExpired,
       'expiryStatusMessage': expiryStatusMessage,
+      'expiry_status_message': expiryStatusMessage,
       'estimatedH2sPpm': estimatedH2sPpm,
+      'estimated_h2s_ppm': estimatedH2sPpm,
       'exposureTime': exposureTime,
+      'exposure_time': exposureTime,
       'temperature': temperature,
       'humidity': humidity,
       'badgeMode': badgeMode,
+      'badge_mode': badgeMode,
       'dataSource': dataSource,
+      'data_source': dataSource,
       'confidencePct': confidencePct,
+      'confidence_pct': confidencePct,
       'actionGuidance': actionGuidance,
+      'action_guidance': actionGuidance,
     };
   }
 
   factory Reading.fromMap(Map<String, dynamic> map) {
+    DateTime parsedTime;
+    try {
+      parsedTime = DateTime.parse(map['timestamp'].toString());
+    } catch (_) {
+      parsedTime = DateTime.now();
+    }
+
+    final double ppm = (map['estimated_h2s_ppm'] ?? map['estimatedH2sPpm'] ?? map['dose'] as num?)?.toDouble() ?? 0.0;
+    final double expTime = (map['exposure_time'] ?? map['exposureTime'] as num?)?.toDouble() ?? 1.0;
+    final double calcDose = (map['dose'] as num?)?.toDouble() ?? (ppm * expTime);
+
     return Reading(
-      id: map['id'] ?? '',
-      workerId: map['workerId'] ?? '',
-      timestamp: DateTime.parse(map['timestamp']),
-      dose: (map['dose'] as num?)?.toDouble() ?? 0.0,
-      intensity: (map['intensity'] as num?)?.toDouble() ?? 0.0,
-      riskLevel: map['riskLevel'] ?? 'Safe',
-      isExpired: map['isExpired'] ?? false,
-      expiryStatusMessage: map['expiryStatusMessage'] ?? '',
-      estimatedH2sPpm: (map['estimatedH2sPpm'] as num?)?.toDouble() ?? (map['dose'] as num?)?.toDouble() ?? 0.0,
-      exposureTime: (map['exposureTime'] as num?)?.toDouble() ?? 1.0,
+      id: (map['id'] ?? map['reading_id'] ?? '').toString(),
+      workerId: (map['worker_id'] ?? map['workerId'] ?? '').toString(),
+      timestamp: parsedTime,
+      dose: calcDose,
+      intensity: (map['intensity'] ?? map['raw_intensity'] ?? map['strip_intensity'] as num?)?.toDouble() ?? 0.0,
+      riskLevel: (map['risk_level'] ?? map['riskLevel'] ?? 'Safe').toString(),
+      isExpired: map['is_expired'] == 1 || map['is_expired'] == true || map['isExpired'] == true,
+      expiryStatusMessage: (map['expiry_status_message'] ?? map['expiryStatusMessage'] ?? 'Active & Verified').toString(),
+      estimatedH2sPpm: ppm,
+      exposureTime: expTime,
       temperature: (map['temperature'] as num?)?.toDouble() ?? 25.0,
-      humidity: (map['humidity'] as num?)?.toDouble() ?? 50.0,
-      badgeMode: map['badgeMode'] ?? 'STANDALONE_CHEMICAL_STRIP',
-      dataSource: map['dataSource'] ?? 'CALIBRATED_OPTICAL_DOSIMETRY_MODEL',
-      confidencePct: (map['confidencePct'] as num?)?.toInt() ?? 94,
-      actionGuidance: map['actionGuidance'] ?? 'Maintain standard monitoring protocols.',
+      humidity: (map['predicted_humidity'] ?? map['humidity'] as num?)?.toDouble() ?? 50.0,
+      badgeMode: (map['badge_mode'] ?? map['badgeMode'] ?? 'STANDALONE_CHEMICAL_STRIP').toString(),
+      dataSource: (map['data_source'] ?? map['dataSource'] ?? 'CALIBRATED_OPTICAL_DOSIMETRY_MODEL').toString(),
+      confidencePct: (map['confidence_pct'] ?? map['confidencePct'] as num?)?.toInt() ?? 92,
+      actionGuidance: (map['action_guidance'] ?? map['actionGuidance'] ?? 'Maintain standard monitoring protocols.').toString(),
     );
   }
 

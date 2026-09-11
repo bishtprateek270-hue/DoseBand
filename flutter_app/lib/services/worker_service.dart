@@ -1,101 +1,189 @@
 import 'package:flutter/foundation.dart';
 import '../models/worker.dart';
 import '../models/reading.dart';
+import 'api_service.dart';
 
+/// Worker & Dosimetry State Management Service.
+///
+/// Automatically synchronizes with the Python FastAPI backend and SQLite database (doseband.db).
+/// Maintains seamless offline fallback with local state caching.
 class WorkerService extends ChangeNotifier {
   static final WorkerService _instance = WorkerService._internal();
   factory WorkerService() => _instance;
 
+  final ApiService _apiService = ApiService();
+
   WorkerService._internal() {
     _initSeedData();
+    refreshFromBackend();
   }
 
   final List<Worker> _workers = [];
   final List<Reading> _readings = [];
+  bool _isLoading = false;
+  String? _lastError;
+  Map<String, dynamic> _dashboardStats = {};
 
   List<Worker> get workers => List.unmodifiable(_workers);
   List<Reading> get readings => List.unmodifiable(_readings);
+  bool get isLoading => _isLoading;
+  String? get lastError => _lastError;
+  Map<String, dynamic> get dashboardStats => _dashboardStats;
+  bool get isConnected => _apiService.isServerConnected;
+
+  /// Fetches latest workers, sensor readings, and aggregated dashboard analytics from Python backend
+  Future<void> refreshFromBackend() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final isHealthy = await _apiService.checkHealth();
+      if (isHealthy) {
+        // Fetch workers from SQLite
+        final workerMaps = await _apiService.getWorkers();
+        if (workerMaps.isNotEmpty) {
+          _workers.clear();
+          for (final wm in workerMaps) {
+            _workers.add(Worker.fromMap(wm));
+          }
+        }
+
+        // Fetch sensor readings from SQLite
+        final readingMaps = await _apiService.getAllReadings();
+        if (readingMaps.isNotEmpty) {
+          _readings.clear();
+          for (final rm in readingMaps) {
+            _readings.add(Reading.fromMap(rm));
+          }
+        }
+
+        // Fetch dashboard analytics
+        _dashboardStats = await _apiService.getDashboardData();
+        _lastError = null;
+      }
+    } catch (e) {
+      _lastError = e.toString();
+      if (kDebugMode) {
+        debugPrint('[WorkerService] Background sync note: $e');
+      }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   void _initSeedData() {
     _workers.addAll([
       Worker(
         workerId: 'W-101',
         name: 'Rajesh Kumar',
-        department: 'Mines & Extraction',
-        shift: 'Day Shift (08:00 - 16:00)',
+        department: 'Refinery Operations',
+        workZone: 'Zone A - Crude Distillation Unit',
+        shift: 'Shift 1 (06:00 - 14:00)',
+        badgeId: 'BDG-101',
+        badgeIssueDate: '2026-08-01',
+        badgeExpiryDate: '2026-11-01',
         emergencyContact: '+91 98765 43210',
         status: 'Active',
-        cumulativeDose: 8.5,
+        cumulativeDose: 1.34,
         riskLevel: 'Safe',
         isBadgeExpired: false,
         lastScanTime: DateTime.now().subtract(const Duration(hours: 3)),
       ),
       Worker(
         workerId: 'W-102',
-        name: 'Anita Sharma',
-        department: 'Chemical Processing',
-        shift: 'Day Shift (08:00 - 16:00)',
+        name: 'Vikram Singh',
+        department: 'Pipeline Maintenance',
+        workZone: 'Zone B - Desulfurization Plant',
+        shift: 'Shift 2 (14:00 - 22:00)',
+        badgeId: 'BDG-102',
+        badgeIssueDate: '2026-08-01',
+        badgeExpiryDate: '2026-11-01',
         emergencyContact: '+91 98123 45678',
         status: 'Active',
-        cumulativeDose: 42.0,
+        cumulativeDose: 14.2,
         riskLevel: 'Caution',
         isBadgeExpired: false,
         lastScanTime: DateTime.now().subtract(const Duration(hours: 1)),
       ),
       Worker(
         workerId: 'W-103',
-        name: 'Vikram Singh',
-        department: 'Refining & Storage',
-        shift: 'Night Shift (20:00 - 04:00)',
+        name: 'Amit Sharma',
+        department: 'Safety & Inspection',
+        workZone: 'Zone C - Storage & Flare Area',
+        shift: 'Shift 1 (06:00 - 14:00)',
+        badgeId: 'BDG-103',
+        badgeIssueDate: '2026-08-01',
+        badgeExpiryDate: '2026-09-15',
         emergencyContact: '+91 97654 32109',
         status: 'Active',
         cumulativeDose: 58.4,
         riskLevel: 'Unsafe',
-        isBadgeExpired: true,
+        isBadgeExpired: false,
         lastScanTime: DateTime.now().subtract(const Duration(days: 1)),
       ),
       Worker(
         workerId: 'W-104',
-        name: 'Suresh Patel',
-        department: 'Maintenance & Safety',
-        shift: 'Swing Shift (12:00 - 20:00)',
+        name: 'Priya Patel',
+        department: 'Chemical Laboratory',
+        workZone: 'Zone D - Quality Control Lab',
+        shift: 'General Shift (09:00 - 17:00)',
+        badgeId: 'BDG-104',
+        badgeIssueDate: '2026-08-01',
+        badgeExpiryDate: '2026-11-01',
         emergencyContact: '+91 96543 21098',
-        status: 'On Shift',
+        status: 'Active',
         cumulativeDose: 4.2,
         riskLevel: 'Safe',
         isBadgeExpired: false,
         lastScanTime: DateTime.now().subtract(const Duration(minutes: 30)),
       ),
+      Worker(
+        workerId: 'W-105',
+        name: 'Sunil Verma',
+        department: 'Drilling & Extraction',
+        workZone: 'Zone E - Wellhead Platform',
+        shift: 'Shift 3 (22:00 - 06:00)',
+        badgeId: 'BDG-105',
+        badgeIssueDate: '2026-08-01',
+        badgeExpiryDate: '2026-11-01',
+        emergencyContact: '+91 95432 10987',
+        status: 'Active',
+        cumulativeDose: 0.0,
+        riskLevel: 'Safe',
+        isBadgeExpired: false,
+        lastScanTime: null,
+      ),
     ]);
 
     _readings.addAll([
       Reading(
-        id: 'R-001',
+        id: '1',
         workerId: 'W-101',
         timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-        dose: 8.5,
-        intensity: 0.18,
+        dose: 1.34,
+        intensity: 0.0158,
         riskLevel: 'Safe',
         isExpired: false,
-        expiryStatusMessage: 'Valid — safe to use',
-        estimatedH2sPpm: 8.5,
+        expiryStatusMessage: 'Active & Verified',
+        estimatedH2sPpm: 1.34,
         exposureTime: 1.0,
         temperature: 25.0,
         humidity: 50.0,
-        badgeMode: 'STANDALONE_CHEMICAL_STRIP',
+        badgeMode: 'FULL_DOSEBAND_BADGE',
         dataSource: 'CALIBRATED_OPTICAL_DOSIMETRY_MODEL',
-        confidencePct: 94,
-        actionGuidance: 'Within permissible 8-hr TWA limit. Safe to continue shift.',
+        confidencePct: 91,
+        actionGuidance: 'Normal operational zone. Below 8-hour permissible exposure limit.',
       ),
       Reading(
-        id: 'R-002',
+        id: '2',
         workerId: 'W-102',
         timestamp: DateTime.now().subtract(const Duration(hours: 1)),
         dose: 14.2,
-        intensity: 0.42,
+        intensity: 0.2201,
         riskLevel: 'Caution',
         isExpired: false,
-        expiryStatusMessage: 'Valid — safe to use',
+        expiryStatusMessage: 'Active & Verified',
         estimatedH2sPpm: 14.2,
         exposureTime: 1.0,
         temperature: 26.5,
@@ -106,14 +194,14 @@ class WorkerService extends ChangeNotifier {
         actionGuidance: 'Exceeds 8-hr TWA threshold. Mandatory industrial ventilation check.',
       ),
       Reading(
-        id: 'R-003',
+        id: '3',
         workerId: 'W-103',
         timestamp: DateTime.now().subtract(const Duration(days: 1)),
         dose: 58.4,
-        intensity: 0.88,
+        intensity: 0.6500,
         riskLevel: 'Unsafe',
-        isExpired: true,
-        expiryStatusMessage: 'EXPIRED — replace badge immediately',
+        isExpired: false,
+        expiryStatusMessage: 'Active & Verified',
         estimatedH2sPpm: 58.4,
         exposureTime: 1.0,
         temperature: 28.0,
@@ -121,25 +209,7 @@ class WorkerService extends ChangeNotifier {
         badgeMode: 'FULL_DOSEBAND_BADGE',
         dataSource: 'CALIBRATED_OPTICAL_DOSIMETRY_MODEL',
         confidencePct: 90,
-        actionGuidance: 'STEL / Critical Exposure Exceeded! Evacuate area immediately.',
-      ),
-      Reading(
-        id: 'R-004',
-        workerId: 'W-104',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 30)),
-        dose: 4.2,
-        intensity: 0.12,
-        riskLevel: 'Safe',
-        isExpired: false,
-        expiryStatusMessage: 'Valid — safe to use',
-        estimatedH2sPpm: 4.2,
-        exposureTime: 1.0,
-        temperature: 24.0,
-        humidity: 48.0,
-        badgeMode: 'STANDALONE_CHEMICAL_STRIP',
-        dataSource: 'CALIBRATED_OPTICAL_DOSIMETRY_MODEL',
-        confidencePct: 95,
-        actionGuidance: 'Within permissible 8-hr TWA limit. Safe to continue shift.',
+        actionGuidance: '🚨 STEL / Critical Exposure Exceeded! Evacuate area immediately.',
       ),
     ]);
   }
@@ -152,16 +222,117 @@ class WorkerService extends ChangeNotifier {
     }
   }
 
-  bool addWorker(Worker worker) {
-    if (getWorkerById(worker.workerId) != null) {
-      return false; // Duplicate ID
+  Worker? getWorkerByBadgeId(String badgeId) {
+    try {
+      return _workers.firstWhere((w) => w.badgeId.toUpperCase() == badgeId.toUpperCase());
+    } catch (_) {
+      return null;
     }
-    _workers.add(worker);
+  }
+
+  List<Reading> getReadingsForWorker(String workerId) {
+    return _readings.where((r) => r.workerId.toUpperCase() == workerId.toUpperCase()).toList();
+  }
+
+  Future<bool> addWorker({
+    required String workerId,
+    required String name,
+    required String department,
+    String workZone = 'Zone A - General Area',
+    required String shift,
+    String badgeId = '',
+    String badgeIssueDate = '',
+    String badgeExpiryDate = '',
+    String emergencyContact = '+91 98765 43210',
+    String status = 'Active',
+  }) async {
+    final effectiveBadge = badgeId.isNotEmpty ? badgeId : 'BDG-${workerId.replaceAll('W-', '')}';
+    final workerMap = {
+      'worker_id': workerId,
+      'name': name,
+      'department': department,
+      'work_zone': workZone,
+      'shift': shift,
+      'badge_id': effectiveBadge,
+      'badge_issue_date': badgeIssueDate.isNotEmpty ? badgeIssueDate : DateTime.now().toIso8601String().substring(0, 10),
+      'badge_expiry_date': badgeExpiryDate.isNotEmpty ? badgeExpiryDate : DateTime.now().add(const Duration(days: 90)).toIso8601String().substring(0, 10),
+      'status': status,
+    };
+
+    // Attempt backend creation
+    try {
+      await _apiService.createWorker(workerMap);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[WorkerService] addWorker backend note: $e');
+    }
+
+    final newWorker = Worker.fromMap(workerMap);
+    _workers.removeWhere((w) => w.workerId == workerId);
+    _workers.add(newWorker);
     notifyListeners();
     return true;
   }
 
-  void addReading({
+  Future<bool> updateWorker({
+    required String workerId,
+    required String name,
+    required String department,
+    required String workZone,
+    required String shift,
+    required String badgeId,
+    required String badgeIssueDate,
+    required String badgeExpiryDate,
+    required String status,
+  }) async {
+    final workerMap = {
+      'name': name,
+      'department': department,
+      'work_zone': workZone,
+      'shift': shift,
+      'badge_id': badgeId,
+      'badge_issue_date': badgeIssueDate,
+      'badge_expiry_date': badgeExpiryDate,
+      'status': status,
+    };
+
+    try {
+      await _apiService.updateWorker(workerId, workerMap);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[WorkerService] updateWorker backend note: $e');
+    }
+
+    final index = _workers.indexWhere((w) => w.workerId == workerId);
+    if (index != -1) {
+      _workers[index] = _workers[index].copyWith(
+        name: name,
+        department: department,
+        workZone: workZone,
+        shift: shift,
+        badgeId: badgeId,
+        badgeIssueDate: badgeIssueDate,
+        badgeExpiryDate: badgeExpiryDate,
+        status: status,
+      );
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> deleteWorker(String workerId) async {
+    try {
+      await _apiService.deleteWorker(workerId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[WorkerService] deleteWorker backend note: $e');
+    }
+
+    _workers.removeWhere((w) => w.workerId == workerId);
+    _readings.removeWhere((r) => r.workerId == workerId);
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> addReading({
     required String workerId,
     required double dose,
     required double intensity,
@@ -176,18 +347,41 @@ class WorkerService extends ChangeNotifier {
     String dataSource = 'CALIBRATED_OPTICAL_DOSIMETRY_MODEL',
     int confidencePct = 94,
     String actionGuidance = 'Maintain standard monitoring protocols.',
-  }) {
-    final now = DateTime.now();
+  }) async {
+    final readingData = {
+      'worker_id': workerId,
+      'intensity': intensity,
+      'dose': dose,
+      'risk_level': riskLevel,
+      'is_expired': isExpired,
+      'expiry_status_message': expiryStatusMessage,
+      'temperature': temperature,
+      'humidity': humidity,
+      'raw_intensity': intensity,
+      'corrected_intensity': intensity,
+      'compensation_factor': 1.0,
+      'exposure_time': exposureTime,
+      'estimated_h2s_ppm': estimatedH2sPpm > 0 ? estimatedH2sPpm : dose,
+      'data_source': dataSource,
+    };
+
+    // Attempt backend persistence to SQLite
+    try {
+      await _apiService.saveReading(readingData);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[WorkerService] addReading backend note: $e');
+    }
+
     final newReading = Reading(
-      id: 'R-${(_readings.length + 1).toString().padLeft(3, '0')}',
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
       workerId: workerId,
-      timestamp: now,
+      timestamp: DateTime.now(),
       dose: dose,
       intensity: intensity,
       riskLevel: riskLevel,
       isExpired: isExpired,
       expiryStatusMessage: expiryStatusMessage,
-      estimatedH2sPpm: estimatedH2sPpm,
+      estimatedH2sPpm: estimatedH2sPpm > 0 ? estimatedH2sPpm : dose,
       exposureTime: exposureTime,
       temperature: temperature,
       humidity: humidity,
@@ -199,50 +393,25 @@ class WorkerService extends ChangeNotifier {
 
     _readings.insert(0, newReading);
 
-    final workerIndex = _workers.indexWhere((w) => w.workerId.toUpperCase() == workerId.toUpperCase());
+    // Update worker's local cumulative dose
+    final workerIndex = _workers.indexWhere((w) => w.workerId == workerId);
     if (workerIndex != -1) {
-      final existingWorker = _workers[workerIndex];
-      final newCumDose = existingWorker.cumulativeDose + dose;
-      
-      // Risk classification per DGMS / OISD / OSHA 29 CFR 1910.1000:
-      // Safe < 10.0 ppm*hr | Caution 10.0–50.0 ppm*hr | Unsafe >= 50.0 ppm*hr
-      String updatedRisk = 'Safe';
-      if (newCumDose >= 50.0 || riskLevel == 'Unsafe') {
-        updatedRisk = 'Unsafe';
-      } else if (newCumDose >= 10.0 || riskLevel == 'Caution') {
-        updatedRisk = 'Caution';
+      final currentWorker = _workers[workerIndex];
+      final newCumDose = currentWorker.cumulativeDose + dose;
+      String newRisk = 'Safe';
+      if (newCumDose >= 50.0) {
+        newRisk = 'Unsafe';
+      } else if (newCumDose >= 10.0) {
+        newRisk = 'Caution';
       }
 
-      _workers[workerIndex] = existingWorker.copyWith(
+      _workers[workerIndex] = currentWorker.copyWith(
         cumulativeDose: newCumDose,
-        riskLevel: updatedRisk,
-        isBadgeExpired: isExpired || existingWorker.isBadgeExpired,
-        lastScanTime: now,
+        riskLevel: newRisk,
+        lastScanTime: DateTime.now(),
       );
-    } else {
-      // Auto register unknown worker
-      _workers.add(Worker(
-        workerId: workerId,
-        name: 'Worker $workerId',
-        department: 'General Operations',
-        shift: 'Standard Shift',
-        emergencyContact: 'Not Provided',
-        status: 'Active',
-        cumulativeDose: dose,
-        riskLevel: riskLevel,
-        isBadgeExpired: isExpired,
-        lastScanTime: now,
-      ));
     }
 
     notifyListeners();
   }
-
-  List<Reading> getReadingsForWorker(String workerId) {
-    return _readings.where((r) => r.workerId.toUpperCase() == workerId.toUpperCase()).toList();
-  }
-
-  int get activeWorkersCount => _workers.where((w) => w.status == 'Active' || w.status == 'On Shift').length;
-  int get unsafeWorkersCount => _workers.where((w) => w.riskLevel == 'Unsafe' || w.cumulativeDose >= 50.0).length;
-  int get expiredBadgesCount => _workers.where((w) => w.isBadgeExpired).length;
 }

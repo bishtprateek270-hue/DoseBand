@@ -243,7 +243,7 @@ $$I_{\text{corrected}} = \frac{I_{\text{raw}}}{\text{CF}}$$
 
 ---
 
-### 🐍 Backend & Web App Setup
+### 🐍 Backend REST API & Web App Setup
 
 1. **Clone the Repository:**
    ```bash
@@ -267,15 +267,23 @@ $$I_{\text{corrected}} = \frac{I_{\text{raw}}}{\text{CF}}$$
    pip install -r requirements.txt
    ```
 
-4. **Launch the DoseBand Web Application:**
+4. **Start the Unified Backend REST API Server (Required for Flutter):**
+   ```bash
+   python api_server.py
+   ```
+   *The FastAPI server starts on `http://0.0.0.0:8000` with full Swagger docs at `http://localhost:8000/docs`.*
+
+5. **Launch the DoseBand Web Application (Optional / Concurrent):**
    ```bash
    streamlit run app.py
    ```
-   The portal will open automatically at `http://localhost:8501`.
+   *The portal will open at `http://localhost:8501`.*
 
 ---
 
 ### 📱 Flutter Mobile App Setup
+
+The Flutter mobile app connects directly to the DoseBand Python backend as its single source of truth for validation, AI predictions, and database persistence.
 
 1. **Navigate to the Flutter directory:**
    ```bash
@@ -287,10 +295,23 @@ $$I_{\text{corrected}} = \frac{I_{\text{raw}}}{\text{CF}}$$
    flutter pub get
    ```
 
-3. **Run on an attached device or emulator:**
-   ```bash
-   flutter run
-   ```
+3. **Run on Target Device / Emulator:**
+
+   - **Android Emulator** (maps to host localhost automatically):
+     ```bash
+     flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+     ```
+
+   - **Physical Android / iOS Device over WiFi** (replace with your computer's local LAN IP):
+     ```bash
+     flutter run --dart-define=API_BASE_URL=http://192.168.1.100:8000
+     ```
+     *(You can also change the Server URL live inside the app anytime by tapping the connection indicator banner in the Scanner tab)*
+
+   - **Chrome / Web / Windows Desktop:**
+     ```bash
+     flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000
+     ```
 
 ---
 
