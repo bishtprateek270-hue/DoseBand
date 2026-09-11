@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
 import 'screens/scanner_screen.dart';
-import 'screens/verify_qr_screen.dart';
 import 'screens/worker_directory_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'services/worker_service.dart';
@@ -59,7 +58,6 @@ class _MainNavigationState extends State<MainNavigation> {
     final List<Widget> screens = [
       HomeScreen(onNavigate: (index) => setState(() => _currentIndex = index)),
       const ScannerScreen(),
-      const VerifyQrScreen(),
       const WorkerDirectoryScreen(),
       const DashboardScreen(),
     ];
@@ -176,11 +174,6 @@ class _MainNavigationState extends State<MainNavigation> {
               icon: Icon(Icons.camera_alt_outlined),
               activeIcon: Icon(Icons.camera_alt_rounded),
               label: 'Scan Strip',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.qr_code_scanner_outlined),
-              activeIcon: Icon(Icons.qr_code_scanner_rounded),
-              label: 'Verify QR',
             ),
             BottomNavigationBarItem(
               icon: Badge(

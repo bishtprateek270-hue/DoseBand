@@ -187,38 +187,22 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: _buildActionTile(
-                    icon: Icons.qr_code_scanner_rounded,
-                    title: 'Verify QR',
-                    subtitle: 'Badge Auth',
-                    color: const Color(0xFF0284C7),
+                    icon: Icons.badge_outlined,
+                    title: 'Workers',
+                    subtitle: 'Personnel Registry',
+                    color: const Color(0xFF10B981),
                     onTap: () => onNavigate(2),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildActionTile(
-                    icon: Icons.badge_outlined,
-                    title: 'Workers',
-                    subtitle: 'Personnel Registry',
-                    color: const Color(0xFF10B981),
-                    onTap: () => onNavigate(3),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildActionTile(
-                    icon: Icons.dashboard_outlined,
-                    title: 'Dashboard',
-                    subtitle: 'Plant Analytics',
-                    color: const Color(0xFF8B5CF6),
-                    onTap: () => onNavigate(4),
-                  ),
-                ),
-              ],
+            _buildActionTile(
+              icon: Icons.dashboard_outlined,
+              title: 'Dashboard & Analytics',
+              subtitle: 'DGMS / OISD Plant Safety Intelligence',
+              color: const Color(0xFF8B5CF6),
+              onTap: () => onNavigate(3),
             ),
             const SizedBox(height: 24),
 
