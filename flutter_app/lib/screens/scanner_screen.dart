@@ -45,9 +45,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
   void initState() {
     super.initState();
     _workerService.addListener(_onServiceUpdate);
-    if (_workerService.workers.isNotEmpty) {
-      _identifiedWorker = _workerService.workers.first;
-    }
+    // Start with no worker selected — worker is strictly determined by the scanned badge
+    _identifiedWorker = null;
+    _isWorkerIdentified = false;
+    _isQrVerified = false;
   }
 
   @override
@@ -86,7 +87,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
       final picked = await _picker.pickImage(source: source, imageQuality: 95);
       if (picked != null) {
         final bytes = await picked.readAsBytes();
-        final res = await _apiService.verifyBadgeQr(imageBytes: bytes);
+        final res = await _workerService.verifyBadge(
+          imageBytes: bytes,
+          fileName: picked.name,
+        );
         _handleQrVerificationResponse(res);
       }
     } catch (e) {
@@ -110,10 +114,15 @@ class _ScannerScreenState extends State<ScannerScreen> {
         _isQrVerified = true;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('✅ Verified Badge for ${w.name} (${w.workerId})'), backgroundColor: AppTheme.safeGreen),
+        SnackBar(
+          content: Text('✅ Verified Badge for ${w.name} (${w.workerId})'),
+          backgroundColor: AppTheme.safeGreen,
+          duration: const Duration(seconds: 3),
+        ),
       );
     } else {
       setState(() {
+        _identifiedWorker = null;
         _isWorkerIdentified = false;
         _isQrVerified = false;
       });
@@ -121,9 +130,75 @@ class _ScannerScreenState extends State<ScannerScreen> {
         SnackBar(
           content: Text('❌ QR Rejected: ${res['message'] ?? 'Invalid DoseBand Badge'}'),
           backgroundColor: AppTheme.unsafeRed,
+          duration: const Duration(seconds: 4),
         ),
       );
     }
+  }
+
+  void _showQuickSelectDialog() {
+    final workers = _workerService.workers;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Select Registered Worker Badge',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: workers.length,
+                itemBuilder: (ctx, idx) {
+                  final w = workers[idx];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: Color(0xFF0F172A),
+                        child: Text('👷'),
+                      ),
+                      title: Text(w.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      subtitle: Text('${w.workerId} • ${w.department} • Badge: ${w.effectiveBadgeId}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                      trailing: const Icon(Icons.qr_code_2_rounded, color: AppTheme.safetyOrange),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        final payload = '{"app":"DoseBand","worker_id":"${w.workerId}","badge_id":"${w.effectiveBadgeId}","version":"1.0"}';
+                        _workerService.verifyBadge(rawPayload: payload).then((res) => _handleQrVerificationResponse(res));
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _analyzeStrip() async {
@@ -396,11 +471,22 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Badge: ${_identifiedWorker!.effectiveBadgeId} • ${_identifiedWorker!.status.toUpperCase()}',
+                                  'Badge: ${_identifiedWorker!.effectiveBadgeId} • ${_identifiedWorker!.status.toUpperCase()} • ${_identifiedWorker!.department}',
                                   style: const TextStyle(fontSize: 11, color: Color(0xFF34D399), fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 18),
+                            tooltip: 'Unlink / Scan Another Badge',
+                            onPressed: () {
+                              setState(() {
+                                _identifiedWorker = null;
+                                _isWorkerIdentified = false;
+                                _isQrVerified = false;
+                              });
+                            },
                           ),
                         ],
                       ),
@@ -413,14 +499,29 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: AppTheme.borderColor),
                       ),
-                      child: const Row(
+                      child: Column(
                         children: [
-                          Icon(Icons.qr_code_scanner_rounded, color: AppTheme.textMuted, size: 18),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Please scan or upload an official DoseBand worker QR badge to identify the worker.',
-                              style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                          const Row(
+                            children: [
+                              Icon(Icons.qr_code_scanner_rounded, color: AppTheme.textMuted, size: 18),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Please scan or upload an official DoseBand worker QR badge to identify the worker.',
+                                  style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: InkWell(
+                              onTap: _showQuickSelectDialog,
+                              child: const Text(
+                                '🧪 Quick Test: Select Worker from Catalog ›',
+                                style: TextStyle(fontSize: 11, color: Color(0xFF0284C7), fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                         ],
