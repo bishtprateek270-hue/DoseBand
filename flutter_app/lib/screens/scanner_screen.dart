@@ -88,57 +88,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
     }
   }
 
-  Future<void> _loadPresetImage(String filename, String presetLabel) async {
-    final possiblePaths = [
-      'test_images/$filename',
-      '../test_images/$filename',
-      'c:/Users/AYUSH/Desktop/AYUSH/flutter_work/DoseBand/test_images/$filename',
-    ];
-
-    File? foundFile;
-    for (final p in possiblePaths) {
-      final f = File(p);
-      if (f.existsSync()) {
-        foundFile = f;
-        break;
-      }
-    }
-
-    if (foundFile != null) {
-      final bytes = await foundFile.readAsBytes();
-      final workers = _workerService.workers;
-      setState(() {
-        _image = foundFile;
-        _imageBytes = bytes;
-        _imageFileName = filename;
-        _latestResult = null;
-        if (workers.isNotEmpty && _scanMode == 'full_badge') {
-          _identifiedWorker = workers.first;
-          _isWorkerIdentified = true;
-        }
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('⚡ Loaded Demo Preset: $presetLabel'),
-            backgroundColor: AppTheme.safetyOrange,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-      _analyzeStrip();
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Preset image $filename not found.'),
-            backgroundColor: AppTheme.unsafeRed,
-          ),
-        );
-      }
-    }
-  }
-
   void _showEmergencyEvacuationAlert(BuildContext context, DosimetryResult r) {
     showDialog(
       context: context,
@@ -736,62 +685,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
             const SizedBox(height: 14),
 
-            // Judge Demo Quick Presets Card
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.safetyOrange.withValues(alpha: 0.5)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.bolt, color: AppTheme.safetyOrange, size: 16),
-                      SizedBox(width: 6),
-                      Text(
-                        'JUDGE DEMO QUICK SCANS (1-TAP FAILSAFE)',
-                        style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w900, letterSpacing: 0.5),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        ActionChip(
-                          avatar: const Icon(Icons.check_circle_rounded, color: AppTheme.safeGreen, size: 14),
-                          label: const Text('0.0 ppm Clean Strip', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white)),
-                          backgroundColor: const Color(0xFF1E293B),
-                          side: const BorderSide(color: Color(0xFF334155)),
-                          onPressed: () => _loadPresetImage('real_strip_01_fresh_cream.jpg', '0.0 ppm Clean Baseline'),
-                        ),
-                        const SizedBox(width: 6),
-                        ActionChip(
-                          avatar: const Icon(Icons.warning_amber_rounded, color: AppTheme.cautionYellow, size: 14),
-                          label: const Text('8.5 ppm Shift TWA Warning', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white)),
-                          backgroundColor: const Color(0xFF1E293B),
-                          side: const BorderSide(color: Color(0xFF334155)),
-                          onPressed: () => _loadPresetImage('real_strip_04_warm_brownish_grey.jpg', '8.5 ppm Shift TWA Warning'),
-                        ),
-                        const SizedBox(width: 6),
-                        ActionChip(
-                          avatar: const Icon(Icons.dangerous_rounded, color: AppTheme.unsafeRed, size: 14),
-                          label: const Text('22.5 ppm STEL BREACH', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white)),
-                          backgroundColor: const Color(0xFF1E293B),
-                          side: const BorderSide(color: Color(0xFF334155)),
-                          onPressed: () => _loadPresetImage('real_strip_08_deep_solid_black.jpg', '22.5 ppm STEL BREACH'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
+
 
             // Step 1: Worker Identification & Badge Verification Card
             Container(
