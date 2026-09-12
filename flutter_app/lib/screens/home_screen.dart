@@ -263,29 +263,6 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-
-            // Live Sync Notice Banner
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFCBD5E1)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.check_circle_rounded, color: AppTheme.safeGreen, size: 20),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Unified SQLite backend active. Real-time synchronization enabled across mobile & web dashboards.',
-                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
-                    ),
-                  ),
-                ],
-              ),
-            ),
             const SizedBox(height: 24),
           ],
         ),
