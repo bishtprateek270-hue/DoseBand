@@ -5,6 +5,7 @@ import 'screens/scanner_screen.dart';
 import 'screens/worker_directory_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'services/api_service.dart';
+import 'screens/landing_screen.dart';
 import 'services/worker_service.dart';
 import 'theme/app_theme.dart';
 
@@ -20,7 +21,7 @@ class DoseBandApp extends StatelessWidget {
     return MaterialApp(
       title: 'DoseBand - Industrial Dosimetry',
       theme: AppTheme.lightTheme,
-      home: const MainNavigation(),
+      home: const LandingScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
