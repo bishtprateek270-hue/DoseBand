@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../services/worker_service.dart';
 import '../theme/app_theme.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -9,10 +8,6 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final workerService = WorkerService();
-    final int activeWorkers = workerService.activeWorkersCount;
-    final int unsafeWorkers = workerService.unsafeWorkersCount;
-
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       body: SingleChildScrollView(
@@ -42,13 +37,16 @@ class HomeScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Text(
-                        'DGMS / OISD COMPLIANT • INDUSTRIAL DOSIMETRY',
-                        style: TextStyle(
-                          color: AppTheme.safetyOrange,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
+                      Flexible(
+                        child: Text(
+                          'DGMS / OISD COMPLIANT • INDUSTRIAL DOSIMETRY',
+                          style: TextStyle(
+                            color: AppTheme.safetyOrange,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.4,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -74,6 +72,7 @@ class HomeScreen extends StatelessWidget {
               style: TextStyle(fontSize: 12.5, color: AppTheme.textMuted, height: 1.35),
             ),
             const SizedBox(height: 16),
+
 
             // Quick Navigation Grid
             const Text(
@@ -203,6 +202,7 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
+
 
   Widget _buildActionCard({
     required IconData icon,

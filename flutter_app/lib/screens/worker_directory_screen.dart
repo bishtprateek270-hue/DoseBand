@@ -103,7 +103,11 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
   }
 
   void _onServiceUpdate() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   void _populateEditForm(Worker w) {
@@ -406,16 +410,27 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
                 const Divider(height: 1, color: Color(0xFFF1F5F9)),
                 const SizedBox(height: 8),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on_outlined, size: 13, color: AppTheme.textMuted),
-                        const SizedBox(width: 3),
-                        Text(w.workZone.split(" - ").first, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
-                      ],
+                    Flexible(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.location_on_outlined, size: 13, color: AppTheme.textMuted),
+                          const SizedBox(width: 3),
+                          Flexible(
+                            child: Text(
+                              w.workZone.split(" - ").first,
+                              style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(Icons.qr_code_2_rounded, size: 13, color: Color(0xFF0284C7)),
                         const SizedBox(width: 3),

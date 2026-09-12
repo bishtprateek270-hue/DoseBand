@@ -35,18 +35,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _onServiceUpdate() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   Future<void> _loadDashboard() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final data = await _apiService.getDashboardData();
+      if (!mounted) return;
       setState(() {
         _dashboardData = data;
         _isLoading = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
@@ -376,32 +383,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.safetyOrangeBg,
-                      borderRadius: BorderRadius.circular(8),
+              Flexible(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.safetyOrangeBg,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.bar_chart_rounded, color: AppTheme.safetyOrange, size: 18),
                     ),
-                    child: const Icon(Icons.bar_chart_rounded, color: AppTheme.safetyOrange, size: 18),
-                  ),
-                  const SizedBox(width: 10),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Recent Shift Dose Telemetry',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                    const SizedBox(width: 10),
+                    const Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Recent Shift Dose Telemetry',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Chronological H₂S dose levels (ppm•h)',
+                            style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                      Text(
-                        'Chronological H₂S dose levels (ppm•h)',
-                        style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -542,10 +556,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '${item['name']} ($wid)',
-                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: color),
+                    Expanded(
+                      child: Text(
+                        '${item['name']} ($wid)',
+                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: color),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       '${item['cumulative_dose'] ?? 0.0} ppm•h',
                       style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: color),

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'config/app_config.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'screens/home_screen.dart';
 import 'screens/scanner_screen.dart';
 import 'screens/worker_directory_screen.dart';
 import 'screens/dashboard_screen.dart';
-import 'services/api_service.dart';
 import 'screens/landing_screen.dart';
 import 'services/worker_service.dart';
 import 'theme/app_theme.dart';
@@ -36,8 +35,8 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
+  int _previousIndex = 0;
   final WorkerService _workerService = WorkerService();
-  final ApiService _apiService = ApiService();
 
   @override
   void initState() {
@@ -52,152 +51,14 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   void _onServiceUpdate() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
-  void _showServerConfigDialog() {
-    final controller = TextEditingController(text: AppConfig.apiBaseUrl);
-    String testStatus = '';
-    Color testColor = AppTheme.textMuted;
-    bool isTesting = false;
 
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.hub_rounded, color: AppTheme.safetyOrange, size: 20),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Server & Device Connection',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: AppTheme.textPrimary),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Configure the FastAPI backend server URL for this device or your local Wi-Fi network:',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  decoration: InputDecoration(
-                    labelText: 'Backend API URL',
-                    hintText: 'http://192.168.1.X:8000',
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    prefixIcon: const Icon(Icons.link_rounded, size: 20),
-                  ),
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    ActionChip(
-                      label: const Text('Localhost (127.0.0.1)', style: TextStyle(fontSize: 10)),
-                      onPressed: () => setDialogState(() => controller.text = 'http://127.0.0.1:8000'),
-                    ),
-                    ActionChip(
-                      label: const Text('Android (10.0.2.2)', style: TextStyle(fontSize: 10)),
-                      onPressed: () => setDialogState(() => controller.text = 'http://10.0.2.2:8000'),
-                    ),
-                  ],
-                ),
-                if (testStatus.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: testColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: testColor.withValues(alpha: 0.4)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(testStatus.contains('✅') ? Icons.check_circle : Icons.error_outline, size: 16, color: testColor),
-                        const SizedBox(width: 6),
-                        Expanded(child: Text(testStatus, style: TextStyle(fontSize: 11, color: testColor, fontWeight: FontWeight.bold))),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isTesting
-                  ? null
-                  : () async {
-                      setDialogState(() {
-                        isTesting = true;
-                        testStatus = 'Pinging backend server...';
-                        testColor = const Color(0xFF0284C7);
-                      });
-                      AppConfig.setRuntimeBaseUrl(controller.text);
-                      final ok = await _apiService.checkHealth();
-                      setDialogState(() {
-                        isTesting = false;
-                        if (ok) {
-                          testStatus = '✅ Connected! Backend is live.';
-                          testColor = AppTheme.safeGreen;
-                        } else {
-                          testStatus = '❌ Unreachable. Check IP & port.';
-                          testColor = AppTheme.unsafeRed;
-                        }
-                      });
-                    },
-              child: isTesting
-                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Test Ping', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-            TextButton(
-              onPressed: () {
-                AppConfig.resetBaseUrl();
-                Navigator.pop(ctx);
-                setState(() {});
-              },
-              child: const Text('Reset', style: TextStyle(color: AppTheme.textMuted)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.safetyOrange,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              onPressed: () {
-                AppConfig.setRuntimeBaseUrl(controller.text);
-                Navigator.pop(ctx);
-                setState(() {});
-                _workerService.fetchWorkers();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Server endpoint set to: ${AppConfig.apiBaseUrl}'),
-                    backgroundColor: AppTheme.safeGreen,
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              },
-              child: const Text('Save & Apply'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -215,7 +76,7 @@ class _MainNavigationState extends State<MainNavigation> {
         titleSpacing: 16,
         backgroundColor: Colors.white,
         elevation: 0,
-        scrolledUnderElevation: 2.0,
+        scrolledUnderElevation: 1.0,
         title: Row(
           children: [
             Container(
@@ -225,9 +86,9 @@ class _MainNavigationState extends State<MainNavigation> {
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.safetyOrange.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    color: AppTheme.safetyOrange.withValues(alpha: 0.28),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
@@ -238,54 +99,33 @@ class _MainNavigationState extends State<MainNavigation> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    const Text(
-                      'DoseBand',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 17,
-                        letterSpacing: -0.4,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'PRO v2.0',
-                        style: TextStyle(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFFFB923C),
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ],
+                Text(
+                  'DoseBand',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 19,
+                    letterSpacing: -0.6,
+                    color: AppTheme.textPrimary,
+                  ),
                 ),
                 Row(
                   children: [
                     Container(
-                      width: 6,
-                      height: 6,
+                      width: 5.5,
+                      height: 5.5,
                       decoration: const BoxDecoration(
                         color: AppTheme.safeGreen,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Text(
-                      'SQLITE LIVE SYNC',
-                      style: TextStyle(
+                    Text(
+                      'LIVE DOSIMETRY SYNC',
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 8.5,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         color: AppTheme.textMuted,
-                        letterSpacing: 0.4,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
@@ -296,51 +136,32 @@ class _MainNavigationState extends State<MainNavigation> {
         ),
         actions: [
           Container(
-            margin: const EdgeInsets.only(right: 6),
+            margin: const EdgeInsets.only(right: 16),
             decoration: BoxDecoration(
-              color: AppTheme.surfaceElevated,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.borderColor),
-            ),
-            child: IconButton(
-              tooltip: 'Server & Wi-Fi Settings',
-              iconSize: 20,
-              padding: const EdgeInsets.all(8),
-              constraints: const BoxConstraints(),
-              icon: const Icon(Icons.settings_ethernet_rounded, color: AppTheme.textPrimary, size: 20),
-              onPressed: _showServerConfigDialog,
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceElevated,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.borderColor),
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: IconButton(
               tooltip: 'System Safety Status',
-              iconSize: 22,
-              padding: const EdgeInsets.all(8),
+              iconSize: 18,
+              padding: const EdgeInsets.all(7),
               constraints: const BoxConstraints(),
               icon: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  const Icon(Icons.notifications_none_rounded, color: AppTheme.textPrimary, size: 22),
+                  const Icon(Icons.notifications_none_rounded, color: AppTheme.textPrimary, size: 18),
                   if (unsafeCount > 0)
                     Positioned(
-                      right: -3,
-                      top: -3,
+                      right: -2,
+                      top: -2,
                       child: Container(
-                        padding: const EdgeInsets.all(3.5),
+                        width: 7.5,
+                        height: 7.5,
                         decoration: BoxDecoration(
                           color: AppTheme.unsafeRed,
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
-                        child: Text(
-                          '$unsafeCount',
-                          style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w900),
+                          border: Border.all(color: Colors.white, width: 1.2),
                         ),
                       ),
                     ),
@@ -375,95 +196,197 @@ class _MainNavigationState extends State<MainNavigation> {
               },
             ),
           ),
-          const SizedBox(width: 4),
         ],
       ),
-      body: screens[_currentIndex],
-      bottomNavigationBar: Container(
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 320),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          // determine direction: forward = slide left, back = slide right
+          final isForward = _currentIndex >= _previousIndex;
+          final begin = isForward
+              ? const Offset(1.0, 0.0)
+              : const Offset(-1.0, 0.0);
+          final slideAnim = Tween<Offset>(
+            begin: begin,
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          ));
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
+            ),
+            child: SlideTransition(position: slideAnim, child: child),
+          );
+        },
+        layoutBuilder: (currentChild, previousChildren) => Stack(
+          children: [
+            ...previousChildren,
+            if (currentChild != null) currentChild,
+          ],
+        ),
+        child: KeyedSubtree(
+          key: ValueKey<int>(_currentIndex),
+          child: screens[_currentIndex],
+        ),
+      ),
+      bottomNavigationBar: _buildMinimalNavDock(unsafeCount),
+    );
+  }
+
+  Widget _buildMinimalNavDock(int unsafeCount) {
+    final navItems = [
+      _NavItemData(index: 0, label: 'Home', icon: Icons.home_outlined, activeIcon: Icons.home_rounded),
+      _NavItemData(index: 1, label: 'Scan', icon: Icons.camera_alt_outlined, activeIcon: Icons.camera_alt_rounded),
+      _NavItemData(index: 2, label: 'Workers', icon: Icons.badge_outlined, activeIcon: Icons.badge_rounded, badgeCount: unsafeCount),
+      _NavItemData(index: 3, label: 'Dash', icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard_rounded),
+    ];
+
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.only(left: 16, right: 16, bottom: 12, top: 4),
+        height: 58,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
         decoration: BoxDecoration(
           color: Colors.white,
-          border: const Border(top: BorderSide(color: AppTheme.borderColor, width: 1.0)),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-              blurRadius: 16,
-              offset: const Offset(0, -4),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.06),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: BottomNavigationBar(
-              currentIndex: _currentIndex,
-              onTap: (index) => setState(() => _currentIndex = index),
-              type: BottomNavigationBarType.fixed,
-              backgroundColor: Colors.white,
-              elevation: 0,
-              selectedItemColor: AppTheme.safetyOrange,
-              unselectedItemColor: AppTheme.textMuted,
-              selectedFontSize: 11,
-              unselectedFontSize: 11,
-              items: [
-                const BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: EdgeInsets.only(bottom: 2.0),
-                    child: Icon(Icons.home_outlined),
-                  ),
-                  activeIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 2.0),
-                    child: Icon(Icons.home_rounded),
-                  ),
-                  label: 'Home',
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: navItems.map((item) {
+            final isSelected = _currentIndex == item.index;
+
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() {
+                  _previousIndex = _currentIndex;
+                  _currentIndex = item.index;
+                }),
+                behavior: HitTestBehavior.opaque,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: isSelected ? 1.0 : 0.0),
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, t, _) {
+                    final bgColor = Color.lerp(
+                      Colors.transparent,
+                      const Color(0xFFFFF7ED),
+                      t,
+                    )!;
+                    final iconColor = Color.lerp(
+                      const Color(0xFF64748B),
+                      AppTheme.safetyOrange,
+                      t,
+                    )!;
+                    final iconSize = 18.0 + (3.0 * t); // 18 → 21
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Icon(
+                                isSelected ? item.activeIcon : item.icon,
+                                color: iconColor,
+                                size: iconSize,
+                              ),
+                              if (item.badgeCount != null && item.badgeCount! > 0)
+                                Positioned(
+                                  right: -4,
+                                  top: -4,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.unsafeRed,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white, width: 1.5),
+                                    ),
+                                    child: Text(
+                                      '${item.badgeCount}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          // Animated label width expand/collapse
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 280),
+                            curve: Curves.easeOutCubic,
+                            child: isSelected
+                                ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const SizedBox(width: 5),
+                                      AnimatedOpacity(
+                                        opacity: t,
+                                        duration: const Duration(milliseconds: 200),
+                                        child: Text(
+                                          item.label,
+                                          style: const TextStyle(
+                                            color: AppTheme.safetyOrange,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: -0.2,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
-                const BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: EdgeInsets.only(bottom: 2.0),
-                    child: Icon(Icons.camera_alt_outlined),
-                  ),
-                  activeIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 2.0),
-                    child: Icon(Icons.camera_alt_rounded),
-                  ),
-                  label: 'Scan Strip',
-                ),
-                BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: const EdgeInsets.only(bottom: 2.0),
-                    child: Badge(
-                      isLabelVisible: unsafeCount > 0,
-                      label: Text('$unsafeCount'),
-                      backgroundColor: AppTheme.unsafeRed,
-                      child: const Icon(Icons.badge_outlined),
-                    ),
-                  ),
-                  activeIcon: Padding(
-                    padding: const EdgeInsets.only(bottom: 2.0),
-                    child: Badge(
-                      isLabelVisible: unsafeCount > 0,
-                      label: Text('$unsafeCount'),
-                      backgroundColor: AppTheme.unsafeRed,
-                      child: const Icon(Icons.badge_rounded),
-                    ),
-                  ),
-                  label: 'Workers',
-                ),
-                const BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: EdgeInsets.only(bottom: 2.0),
-                    child: Icon(Icons.dashboard_outlined),
-                  ),
-                  activeIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 2.0),
-                    child: Icon(Icons.dashboard_rounded),
-                  ),
-                  label: 'Dashboard',
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          }).toList(),
         ),
       ),
     );
   }
+}
+
+class _NavItemData {
+  final int index;
+  final String label;
+  final IconData icon;
+  final IconData activeIcon;
+  final int? badgeCount;
+
+  _NavItemData({
+    required this.index,
+    required this.label,
+    required this.icon,
+    required this.activeIcon,
+    this.badgeCount,
+  });
 }

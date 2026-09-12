@@ -60,7 +60,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   void _onServiceUpdate() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -555,15 +559,20 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(Icons.science_rounded, size: 16, color: isStandalone ? AppTheme.safetyOrange : AppTheme.textMuted),
                                 const SizedBox(width: 6),
-                                Text(
-                                  'Standalone H₂S Strip',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w900,
-                                    color: isStandalone ? Colors.white : AppTheme.textSecondary,
+                                Flexible(
+                                  child: Text(
+                                    'Standalone H₂S Strip',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w900,
+                                      color: isStandalone ? Colors.white : AppTheme.textSecondary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
                                   ),
                                 ),
                               ],
@@ -601,28 +610,28 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text('STEP 1', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w900)),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            !isStandalone
-                                ? 'Worker Identification & Badge QR (Mandatory)'
-                                : 'Worker Assignment (Optional for Demo)',
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
-                          ),
-                        ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text('STEP 1', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w900)),
                       ),
-                      if (_identifiedWorker != null)
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          !isStandalone
+                              ? 'Worker ID & Badge QR (Mandatory)'
+                              : 'Worker Assignment (Optional)',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      if (_identifiedWorker != null) ...[
+                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
@@ -631,6 +640,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             border: Border.all(color: AppTheme.safeGreen.withValues(alpha: 0.5)),
                           ),
                           child: const Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.check, size: 12, color: AppTheme.safeGreen),
                               SizedBox(width: 3),
@@ -638,6 +648,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             ],
                           ),
                         ),
+                      ],
                     ],
                   ),
                   if (isStandalone && _identifiedWorker == null) ...[
@@ -803,26 +814,26 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text('STEP 2', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w900)),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            !isStandalone ? 'Capture Full DoseBand Photo' : 'Capture H₂S Strip Photo',
-                            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
-                          ),
-                        ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text('STEP 2', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w900)),
                       ),
-                      if (_imageBytes != null)
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          !isStandalone ? 'Capture Full DoseBand Photo' : 'Capture H₂S Strip Photo',
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      if (_imageBytes != null) ...[
+                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
@@ -832,6 +843,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                           ),
                           child: const Text('READY', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppTheme.safetyOrange)),
                         ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 6),
