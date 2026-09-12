@@ -28,6 +28,10 @@ class DosimetryResult {
   final List<String> rejectionReasons;
   final double temperatureC;
   final double predictedHumidity;
+  final String? debugOverlayBase64;
+  final String? canonicalViewBase64;
+  final String? deviceType;
+  final bool deviceGeometryValid;
 
   DosimetryResult({
     required this.isValid,
@@ -52,6 +56,10 @@ class DosimetryResult {
     this.rejectionReasons = const [],
     this.temperatureC = 25.0,
     this.predictedHumidity = 50.0,
+    this.debugOverlayBase64,
+    this.canonicalViewBase64,
+    this.deviceType = '3D_PRINTED_PROTOTYPE',
+    this.deviceGeometryValid = true,
   });
 }
 
@@ -225,6 +233,10 @@ class DosimetryService {
         rejectionReasons: rejectionReasons,
         temperatureC: (apiResponse['temperature'] as num?)?.toDouble() ?? temperatureC,
         predictedHumidity: (apiResponse['predicted_humidity'] ?? apiResponse['humidity'] as num?)?.toDouble() ?? humidityRh,
+        debugOverlayBase64: apiResponse['debug_overlay_base64']?.toString(),
+        canonicalViewBase64: apiResponse['canonical_view_base64']?.toString(),
+        deviceType: apiResponse['device_type']?.toString() ?? '3D_PRINTED_PROTOTYPE',
+        deviceGeometryValid: apiResponse['device_geometry_valid'] != false,
       );
     } catch (e) {
       if (kDebugMode) {
@@ -451,13 +463,13 @@ class DosimetryService {
     if (!isValid) {
       status = 'Invalid';
       if (isQrCodeOrBinary) {
-        userMsg = 'Image is a QR Code or identification barcode, not an optical sensor strip. Please scan QR in Step 1 and upload the physical exposure test strip in Step 3.';
+        userMsg = 'Image is a QR Code or identification barcode, not an optical sensor strip. Please scan QR in Step 1 and upload the physical exposure test strip in Step 2.';
       } else if (isChromatic) {
-        userMsg = 'Non-chemical vivid chromatic saturation detected. Authentic PbS dosimeters are neutral/tan/brown/gray.';
+        userMsg = 'Invalid DoseBand scan — vivid non-chemical color detected. Reposition the band and try again.';
       } else if (isExtremeLighting) {
-        userMsg = 'Extreme lighting or glare detected. Please photograph strip in steady ambient light.';
+        userMsg = 'Invalid DoseBand scan — extreme glare or dark shadow. Reposition the band and try again.';
       } else {
-        userMsg = 'Image failed physical dosimeter strip texture & optical verification.';
+        userMsg = 'Invalid DoseBand scan — reposition the band and try again.';
       }
     }
 

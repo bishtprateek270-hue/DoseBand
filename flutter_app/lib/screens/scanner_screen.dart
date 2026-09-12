@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -314,12 +315,47 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text('Worker: ${_identifiedWorker?.name} (${_identifiedWorker?.workerId})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                Text('Enclosure / Method: ${r.deviceType ?? "3D_PRINTED_PROTOTYPE"}', style: const TextStyle(fontSize: 12, color: Color(0xFF0284C7), fontWeight: FontWeight.bold)),
                 Text('Optical Staining Score: ${(r.rawIntensity * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
                 Text('Temperature: ${r.temperatureC}°C | Humidity: ${r.predictedHumidity.toStringAsFixed(0)}% RH', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
                 const SizedBox(height: 8),
                 Text(
                   '💡 Guidance: ${r.actionGuidance}',
                   style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+                ),
+              ],
+              if (r.debugOverlayBase64 != null && r.debugOverlayBase64!.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.crop_free_rounded, color: AppTheme.safetyOrange, size: 14),
+                          SizedBox(width: 6),
+                          Text(
+                            '3D Prototype ROI & Perspective Alignment',
+                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.memory(
+                          base64Decode(r.debugOverlayBase64!),
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
               const SizedBox(height: 12),

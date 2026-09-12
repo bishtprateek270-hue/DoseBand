@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'config/app_config.dart';
 import 'screens/home_screen.dart';
 import 'screens/scanner_screen.dart';
 import 'screens/worker_directory_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'services/api_service.dart';
 import 'services/worker_service.dart';
 import 'theme/app_theme.dart';
 
@@ -34,6 +36,7 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
   final WorkerService _workerService = WorkerService();
+  final ApiService _apiService = ApiService();
 
   @override
   void initState() {
@@ -49,6 +52,147 @@ class _MainNavigationState extends State<MainNavigation> {
 
   void _onServiceUpdate() {
     if (mounted) setState(() {});
+  }
+
+  void _showServerConfigDialog() {
+    final controller = TextEditingController(text: AppConfig.apiBaseUrl);
+    String testStatus = '';
+    Color testColor = AppTheme.textMuted;
+    bool isTesting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.hub_rounded, color: AppTheme.safetyOrange, size: 22),
+              SizedBox(width: 8),
+              Text(
+                'Server & Device Connection',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: AppTheme.textPrimary),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Configure the FastAPI backend server URL for this device or your local Wi-Fi network:',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  decoration: InputDecoration(
+                    labelText: 'Backend API URL',
+                    hintText: 'http://192.168.1.X:8000',
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    prefixIcon: const Icon(Icons.link_rounded, size: 20),
+                  ),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ActionChip(
+                      label: const Text('Localhost (127.0.0.1)', style: TextStyle(fontSize: 10)),
+                      onPressed: () => setDialogState(() => controller.text = 'http://127.0.0.1:8000'),
+                    ),
+                    ActionChip(
+                      label: const Text('Android (10.0.2.2)', style: TextStyle(fontSize: 10)),
+                      onPressed: () => setDialogState(() => controller.text = 'http://10.0.2.2:8000'),
+                    ),
+                  ],
+                ),
+                if (testStatus.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: testColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: testColor.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(testStatus.contains('✅') ? Icons.check_circle : Icons.error_outline, size: 16, color: testColor),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(testStatus, style: TextStyle(fontSize: 11, color: testColor, fontWeight: FontWeight.bold))),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isTesting
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        isTesting = true;
+                        testStatus = 'Pinging backend server...';
+                        testColor = const Color(0xFF0284C7);
+                      });
+                      AppConfig.setRuntimeBaseUrl(controller.text);
+                      final ok = await _apiService.checkHealth();
+                      setDialogState(() {
+                        isTesting = false;
+                        if (ok) {
+                          testStatus = '✅ Connected! Backend is live.';
+                          testColor = AppTheme.safeGreen;
+                        } else {
+                          testStatus = '❌ Unreachable. Check IP & port.';
+                          testColor = AppTheme.unsafeRed;
+                        }
+                      });
+                    },
+              child: isTesting
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Test Ping', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            TextButton(
+              onPressed: () {
+                AppConfig.resetBaseUrl();
+                Navigator.pop(ctx);
+                setState(() {});
+              },
+              child: const Text('Reset', style: TextStyle(color: AppTheme.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.safetyOrange,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                AppConfig.setRuntimeBaseUrl(controller.text);
+                Navigator.pop(ctx);
+                setState(() {});
+                _workerService.fetchWorkers();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Server endpoint set to: ${AppConfig.apiBaseUrl}'),
+                    backgroundColor: AppTheme.safeGreen,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              child: const Text('Save & Apply'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -147,6 +291,22 @@ class _MainNavigationState extends State<MainNavigation> {
           ],
         ),
         actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceElevated,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: IconButton(
+              tooltip: 'Server & Wi-Fi Settings',
+              iconSize: 20,
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(),
+              icon: const Icon(Icons.settings_ethernet_rounded, color: AppTheme.textPrimary, size: 20),
+              onPressed: _showServerConfigDialog,
+            ),
+          ),
           Container(
             margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
