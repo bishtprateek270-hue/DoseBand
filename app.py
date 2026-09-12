@@ -942,14 +942,6 @@ elif page == "Scan Strip":
                             f"{inf_res['cumulative_dose_ppm_h']:.2f} ppm·h",
                             delta=f"Total: {cumulative_dose:.2f} ppm·h" if (not is_standalone_mode or assign_to_worker) else None,
                             help="Shift dose (estimated ppm × hours) and total worker cumulative exposure"
-                        )ce']} (Clamped: 20–90% RH)"
-                        )
-                    with m_col3:
-                        st.metric(
-                            "Shift Cumulative Exposure",
-                            f"{inf_res['cumulative_dose_ppm_h']:.2f} ppm·h",
-                            delta=f"Total: {cumulative_dose:.2f} ppm·h",
-                            help="Shift dose (estimated ppm × hours) and total worker cumulative exposure"
                         )
                     with m_col4:
                         rel_label = inf_res.get("reliability_label", "High Reliability")
