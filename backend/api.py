@@ -8,6 +8,7 @@ Provides unified endpoints for:
 - Live Industrial Dashboard Analytics & Reports
 """
 
+import base64
 import io
 import json
 import os
@@ -451,6 +452,13 @@ async def analyze_sensor_strip(
 
         is_allowed_to_save = is_strip_valid and is_worker_active and not is_profile_expired and not is_optical_expired
 
+        # Encode developer debug overlay as base64 JPEG
+        debug_overlay_b64 = None
+        if inf_res.get("debug_overlay") is not None and isinstance(inf_res["debug_overlay"], np.ndarray):
+            success, enc_jpg = cv2.imencode(".jpg", inf_res["debug_overlay"])
+            if success:
+                debug_overlay_b64 = base64.b64encode(enc_jpg.tobytes()).decode("utf-8")
+
         return to_serializable({
             "is_valid": inf_res.get("is_valid", True),
             "status": "Valid",
@@ -470,6 +478,7 @@ async def analyze_sensor_strip(
             "risk_color": inf_res.get("risk_color", "#10B981"),
             "action_guidance": inf_res.get("action_guidance", "Within permissible 8-hr TWA limit. Safe to continue shift."),
             "badge_mode": detected_mode,
+            "debug_overlay_base64": debug_overlay_b64,
             "is_badge_expired": is_profile_expired or is_optical_expired,
             "is_allowed_to_save": is_allowed_to_save,
             "expiry_status_message": expiry_status_msg,

@@ -1,18 +1,30 @@
 """
 DoseBand ROI Detector & Preprocessing Module.
 
-Locates and extracts candidate ROIs from an uploaded DoseBand badge photograph:
-1. Reference Grayscale Step Wedge (for lighting calibration)
-2. H2S Lead Acetate Sensor Strip ROI (sampled centrally to avoid edge shadows and text)
-3. Humidity Indicator Patch / Circle ROI (sampled centrally to exclude borders)
-4. Shelf-Life Expiry Patch ROI
+Locates and extracts candidate ROIs from:
+1. Physical 3D-Printed DoseBand Watch Enclosure (with perspective rectification & fixed sub-windows)
+2. Reference Grayscale Step Wedge (for printed legacy badges)
+3. H2S Lead Acetate Sensor Strip ROI (sampled centrally to avoid edge shadows, grille ribs, and text)
+4. Humidity Indicator Patch / Circle ROI (sampled centrally to exclude borders)
+5. Shelf-Life Expiry Patch ROI
 
-Provides ROI confidence scoring, visualization overlays, and central-region feature extraction.
+Provides ROI confidence scoring, visualization overlays, and developer debug diagnostics.
 """
 
 from typing import Dict, Tuple, Any, Optional
 import cv2
 import numpy as np
+from doseband_device_detector import (
+    detect_doseband_enclosure,
+    warp_perspective_to_canonical,
+    extract_robust_sensor_features,
+    render_developer_debug_overlay,
+    CANONICAL_WIDTH,
+    CANONICAL_HEIGHT,
+    BOTTOM_WINDOW_BOX,
+    MIDDLE_WINDOW_BOX,
+    TOP_WINDOW_BOX
+)
 
 
 def detect_all_rois(
@@ -20,19 +32,87 @@ def detect_all_rois(
     min_confidence: float = 0.50
 ) -> Dict[str, Any]:
     """
-    Detects all 4 key regions on a DoseBand dosimeter badge image.
+    Detects all key regions on a DoseBand dosimeter image (physical 3D enclosure or badge).
 
     Args:
         image_bgr (np.ndarray): BGR image array.
         min_confidence (float): Minimum confidence threshold for valid ROI detection.
 
     Returns:
-        dict: Detection result with bounding boxes, confidence scores, and valid flag.
+        dict: Detection result with bounding boxes, confidence scores, canonical views, and valid flag.
     """
+    if image_bgr is None or image_bgr.size == 0:
+        return {
+            "is_valid": False,
+            "badge_mode": "INVALID",
+            "overall_confidence": 0.0,
+            "ref_scale": {"box": (0, 0, 0, 0), "confidence": 0.0},
+            "h2s_strip": {"box": (0, 0, 0, 0), "confidence": 0.0},
+            "humidity_indicator": {"box": (0, 0, 0, 0), "confidence": 0.0},
+            "expiry_patch": {"box": (0, 0, 0, 0), "confidence": 0.0}
+        }
+
     h, w = image_bgr.shape[:2]
-    
+
     # -------------------------------------------------------------------------
-    # 1. Reference Scale ROI (Left ~33% of badge)
+    # Tier 1: Check for Physical 3D-Printed DoseBand Prototype Enclosure
+    # -------------------------------------------------------------------------
+    enclosure_detected, quad_pts, enc_diag = detect_doseband_enclosure(image_bgr)
+    if enclosure_detected and quad_pts is not None:
+        warped_canonical = warp_perspective_to_canonical(image_bgr, quad_pts)
+        extracted_data = extract_robust_sensor_features(warped_canonical, quad_detected=True)
+        
+        # Calculate bounding box on original image
+        pts = quad_pts.astype(np.int32)
+        min_x = int(np.min(pts[:, 0]))
+        max_x = int(np.max(pts[:, 0]))
+        min_y = int(np.min(pts[:, 1]))
+        max_y = int(np.max(pts[:, 1]))
+
+        # Approximate original sensor window location
+        bw = max_x - min_x
+        bh = max_y - min_y
+        h2s_box_orig = (
+            min_x + int(bw * 0.15),
+            min_y + int(bh * 0.45),
+            min_x + int(bw * 0.85),
+            min_y + int(bh * 0.92)
+        )
+        hum_box_orig = (
+            min_x + int(bw * 0.20),
+            min_y + int(bh * 0.22),
+            min_x + int(bw * 0.80),
+            min_y + int(bh * 0.40)
+        )
+
+        return {
+            "is_valid": True,
+            "badge_mode": "FULL_3D_DOSEBAND_ENCLOSURE",
+            "overall_confidence": 0.95,
+            "quad_points": quad_pts.tolist(),
+            "canonical_view": warped_canonical,
+            "extracted_features": extracted_data,
+            "device_box": (min_x, min_y, max_x, max_y),
+            "ref_scale": {
+                "box": (min_x + int(bw * 0.20), min_y + int(bh * 0.07), min_x + int(bw * 0.80), min_y + int(bh * 0.18)),
+                "confidence": 0.90
+            },
+            "h2s_strip": {
+                "box": h2s_box_orig,
+                "confidence": 0.95
+            },
+            "humidity_indicator": {
+                "box": hum_box_orig,
+                "confidence": 0.90
+            },
+            "expiry_patch": {
+                "box": (min_x + int(bw * 0.65), min_y + int(bh * 0.07), min_x + int(bw * 0.85), min_y + int(bh * 0.18)),
+                "confidence": 0.85
+            }
+        }
+
+    # -------------------------------------------------------------------------
+    # Tier 2: Legacy Printed Scale Badge vs Standalone Strip
     # -------------------------------------------------------------------------
     ref_x1 = int(w * 0.03)
     ref_y1 = int(h * 0.08)
@@ -43,9 +123,6 @@ def detect_all_rois(
     ref_std = float(np.std(ref_crop)) if ref_crop.size > 0 else 0.0
     ref_conf = min(1.0, max(0.0, (ref_std - 15.0) / 45.0)) if ref_std > 15.0 else 0.20
 
-    # -------------------------------------------------------------------------
-    # 2. H2S Sensor Strip ROI (Upper/Middle Right 2/3)
-    # -------------------------------------------------------------------------
     h2s_x1 = int(w * 0.36)
     h2s_y1 = int(h * 0.10)
     h2s_x2 = int(w * 0.96)
@@ -54,9 +131,6 @@ def detect_all_rois(
     h2s_crop = image_bgr[h2s_y1:h2s_y2, h2s_x1:h2s_x2]
     h2s_conf = 0.90 if h2s_crop.size > 0 else 0.0
 
-    # -------------------------------------------------------------------------
-    # 3. Humidity Indicator ROI (Lower Center / Lower Left-of-Expiry)
-    # -------------------------------------------------------------------------
     hum_x1 = int(w * 0.38)
     hum_y1 = int(h * 0.72)
     hum_x2 = int(w * 0.68)
@@ -65,9 +139,6 @@ def detect_all_rois(
     hum_crop = image_bgr[hum_y1:hum_y2, hum_x1:hum_x2]
     hum_conf = 0.85 if hum_crop.size > 0 else 0.0
 
-    # -------------------------------------------------------------------------
-    # 4. Expiry Indicator Patch ROI (Bottom Right Corner)
-    # -------------------------------------------------------------------------
     exp_x1 = int(w * 0.72)
     exp_y1 = int(h * 0.72)
     exp_x2 = int(w * 0.98)
@@ -76,7 +147,6 @@ def detect_all_rois(
     exp_crop = image_bgr[exp_y1:exp_y2, exp_x1:exp_x2]
     exp_conf = 0.85 if exp_crop.size > 0 else 0.0
 
-    # Check if image is a Full Badge (contains left reference scale) vs Standalone Physical Test Strip
     is_full_badge = ref_conf >= 0.50 and w >= 250 and h >= 150 and (0.8 <= (w / float(h)) <= 2.8)
 
     if is_full_badge:
@@ -104,8 +174,6 @@ def detect_all_rois(
             }
         }
     else:
-        # Standalone Physical Test Strip (Plain or Textured Paper Strip)
-        # Sample active sensor window from central 80% of strip image
         s_x1 = int(w * 0.08)
         s_y1 = int(h * 0.08)
         s_x2 = int(w * 0.92)
@@ -142,8 +210,6 @@ def extract_center_features(
 ) -> Dict[str, float]:
     """
     Extracts RGB, HSV, and Grayscale features from the central portion of an ROI bounding box.
-    
-    Sampling strictly from the center avoids enclosure edges, printed text, shadows, and borders.
     """
     x1, y1, x2, y2 = box
     roi_bgr = image_bgr[y1:y2, x1:x2]
@@ -162,7 +228,6 @@ def extract_center_features(
     if center_bgr.size == 0:
         center_bgr = roi_bgr
 
-    # Multi-pixel spatial smoothing with median filtering to eliminate noise/glare
     ch, cw = center_bgr.shape[:2]
     if ch >= 5 and cw >= 5:
         filtered_bgr = cv2.medianBlur(center_bgr, 3)
@@ -189,9 +254,7 @@ def extract_humidity_card_features(
     box: Tuple[int, int, int, int]
 ) -> Dict[str, float]:
     """
-    Extracts RGB and HSV features specifically from the circular colored disc
-    of the humidity indicator card, excluding the card background and dark outer border.
-    Uses the exact same preprocessing (RGB mean, HSV via cv2.cvtColor) as during model training.
+    Extracts RGB and HSV features from the circular colored disc of the humidity indicator card.
     """
     x1, y1, x2, y2 = box
     crop_bgr = image_bgr[y1:y2, x1:x2]
@@ -212,7 +275,6 @@ def extract_humidity_card_features(
     
     disc_pixels_bgr = crop_bgr[circle_mask]
     
-    # Exclude white card background (>225 in all RGB channels) and black border (<40 in all channels)
     valid_pixels = []
     for px in disc_pixels_bgr:
         b, g, r = float(px[0]), float(px[1]), float(px[2])
@@ -224,7 +286,6 @@ def extract_humidity_card_features(
     if len(valid_pixels) >= 12:
         sampled_bgr = np.array(valid_pixels, dtype=np.uint8)
     else:
-        # Fallback to inner core
         core_mask = dist <= max(4, r_sample // 2)
         sampled_bgr = crop_bgr[core_mask]
         if sampled_bgr.size == 0:
@@ -255,10 +316,10 @@ def draw_roi_visual_overlay(
     font = cv2.FONT_HERSHEY_SIMPLEX
 
     roi_specs = [
-        ("ref_scale", "Ref Scale (5-Step)", (255, 140, 0)),        # Orange
-        ("h2s_strip", "H2S Sensor ROI", (0, 220, 0)),              # Green
-        ("humidity_indicator", "Humidity Card ROI", (255, 50, 180)),# Pink/Magenta
-        ("expiry_patch", "Expiry Patch ROI", (0, 200, 255))        # Yellow
+        ("ref_scale", "Ref Scale (5-Step)", (255, 140, 0)),
+        ("h2s_strip", "H2S Sensor ROI", (0, 220, 0)),
+        ("humidity_indicator", "Humidity Card ROI", (255, 50, 180)),
+        ("expiry_patch", "Expiry Patch ROI", (0, 200, 255))
     ]
 
     for key, label, color in roi_specs:
@@ -266,17 +327,14 @@ def draw_roi_visual_overlay(
             x1, y1, x2, y2 = detections[key]["box"]
             conf = detections[key]["confidence"]
 
-            # Outer ROI Bounding Box
             cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 2)
             
-            # Central safe sampling zone (dotted / thinner line)
             rw = x2 - x1
             rh = y2 - y1
             mx = int(rw * 0.20)
             my = int(rh * 0.20)
             cv2.rectangle(overlay, (x1 + mx, y1 + my), (x2 - mx, y2 - my), color, 1)
 
-            # Label banner
             cv2.putText(
                 overlay,
                 f"{label} ({int(conf * 100)}%)",

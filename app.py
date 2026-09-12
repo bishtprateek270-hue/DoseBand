@@ -930,15 +930,20 @@ elif page == "Scan Strip":
                     # Expiry Status Banner
                     st.info(f"✅ **Badge Expiry Status:** {expiry_status_msg}")
 
-                # Extracted Sensor ROIs & Features in Full-Width Expander
-                with st.expander("🔬 View Extracted Sensor ROIs & Optical Color Features", expanded=False):
+                # Extracted Sensor ROIs, Canonical View & Developer Debug Overlay
+                with st.expander("🔬 View Extracted Sensor ROIs, 3D Prototype Geometry & Debug Overlay", expanded=False):
+                    if inf_res.get("debug_overlay") is not None and isinstance(inf_res["debug_overlay"], np.ndarray):
+                        st.markdown("#### 🛠️ Developer Perspective Rectification & Alignment Overlay")
+                        st.image(cv2.cvtColor(inf_res["debug_overlay"], cv2.COLOR_BGR2RGB), caption="Perspective Rectification & Multi-Zone Alignment Overlay", use_container_width=True)
+                        st.divider()
+
                     roi_v_col1, roi_v_col2 = st.columns(2)
                     
                     with roi_v_col1:
                         h2s_b = inf_res["roi_detections"]["h2s_strip"]["box"]
                         h2s_crop = preview_bgr[h2s_b[1]:h2s_b[3], h2s_b[0]:h2s_b[2]]
                         if h2s_crop.size > 0:
-                            st.image(cv2.cvtColor(h2s_crop, cv2.COLOR_BGR2RGB), caption="Detected H2S Sensor Strip ROI (Center Sampled)", use_container_width=True)
+                            st.image(cv2.cvtColor(h2s_crop, cv2.COLOR_BGR2RGB), caption="Detected H2S Sensor Strip ROI (Chemical Area Isolated)", use_container_width=True)
                         h_feat = inf_res["h2s_features"]
                         st.markdown(
                             f"""
