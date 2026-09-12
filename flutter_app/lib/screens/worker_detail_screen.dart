@@ -333,27 +333,29 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            QrBadgeCardWidget(worker: w),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: 340,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.check_circle_rounded, size: 18),
-                label: const Text('Dismiss', style: TextStyle(fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.safetyOrange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              QrBadgeCardWidget(worker: w),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: 340,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.check_circle_rounded, size: 18),
+                  label: const Text('Dismiss', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.safetyOrange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop(),
                 ),
-                onPressed: () => Navigator.of(ctx).pop(),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

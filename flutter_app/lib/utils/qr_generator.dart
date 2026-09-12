@@ -1,42 +1,41 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 
 /// Lightweight, 100% offline, self-contained QR Code Matrix Generator in Pure Dart.
-/// Implements ISO/IEC 18004 QR Code Version 1 to 4 with Reed-Solomon Error Correction.
+/// Implements ISO/IEC 18004 QR Code Version 1 to 6 with Reed-Solomon Error Correction.
 /// Zero external package dependencies, zero network calls, 100% reliable.
 class QrCodeGenerator {
-  static const List<int> _gfExp = [
-    1, 2, 4, 8, 16, 32, 64, 128, 29, 58, 116, 232, 205, 135, 19, 38,
-    76, 152, 45, 90, 180, 117, 234, 201, 143, 3, 6, 12, 24, 48, 96, 192,
-    157, 39, 78, 156, 37, 74, 148, 53, 106, 212, 217, 125, 250, 229, 197, 149,
-    55, 110, 220, 221, 127, 254, 225, 199, 147, 59, 118, 236, 197, 151, 51, 102,
-    204, 133, 23, 46, 92, 184, 109, 218, 217, 127, 254, 225, 199, 147, 59, 118,
-    236, 197, 151, 51, 102, 204, 133, 23, 46, 92, 184, 109, 218, 225, 199, 147,
-    59, 118, 236, 197, 151, 51, 102, 204, 133, 23, 46, 92, 184, 109, 218, 127,
-    254, 225, 199, 147, 59, 118, 236, 197, 151, 51, 102, 204, 133, 23, 46, 92,
-    184, 109, 218, 217, 125, 250, 229, 197, 149, 55, 110, 220, 221, 127, 254,
-    225, 199, 147, 59, 118, 236, 197, 151, 51, 102, 204, 133, 23, 46, 92, 184,
-    109, 218, 217, 125, 250, 229, 197, 149, 55, 110, 220, 221, 127, 254, 225,
-    199, 147, 59, 118, 236, 197, 151, 51, 102, 204, 133, 23, 46, 92, 184, 109,
-    218, 217, 125, 250, 229, 197, 149, 55, 110, 220, 221, 127, 254, 225, 199,
-    147, 59, 118, 236, 197, 151, 51, 102, 204, 133, 23, 46, 92, 184, 109, 218,
-    217, 125, 250, 229, 197, 149, 55, 110, 220, 221, 127, 254, 225, 199, 147,
-    59, 118, 236, 197, 151, 51, 102, 204, 133, 23, 46, 92, 184, 109, 218, 1
-  ];
+  // Galois Field GF(2^8) Exponential and Logarithm lookup tables
+  static final List<int> _exp = List<int>.filled(512, 0);
+  static final List<int> _log = List<int>.filled(256, 0);
+  static bool _tablesInitialized = false;
+
+  static void _initTables() {
+    if (_tablesInitialized) return;
+    int x = 1;
+    for (int i = 0; i < 255; i++) {
+      _exp[i] = x;
+      _exp[i + 255] = x;
+      _log[x] = i;
+      x <<= 1;
+      if ((x & 0x100) != 0) {
+        x ^= 0x11D; // Primitive polynomial for QR codes: x^8 + x^4 + x^3 + x^2 + 1
+      }
+    }
+    _tablesInitialized = true;
+  }
 
   static int _gMul(int a, int b) {
     if (a == 0 || b == 0) return 0;
-    // Compute log
-    int logA = _gfExp.indexOf(a);
-    int logB = _gfExp.indexOf(b);
-    return _gfExp[(logA + logB) % 255];
+    _initTables();
+    return _exp[_log[a] + _log[b]];
   }
 
   static List<int> _calcReedSolomon(List<int> data, int ecCount) {
+    _initTables();
     List<int> gen = [1];
     for (int i = 0; i < ecCount; i++) {
       List<int> next = List.filled(gen.length + 1, 0);
-      int factor = _gfExp[i];
+      int factor = _exp[i];
       for (int j = 0; j < gen.length; j++) {
         next[j] ^= gen[j];
         next[j + 1] ^= _gMul(gen[j], factor);
@@ -223,14 +222,22 @@ class QrCodeGenerator {
 
     // 4. Place Format Information (Mask 0, EC Level M -> 101010000010010 XOR 101010000010000)
     const List<int> fmtBits = [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0];
-    for (int i = 0; i < 6; i++) matrix[8][i] = fmtBits[i];
+    for (int i = 0; i < 6; i++) {
+      matrix[8][i] = fmtBits[i];
+    }
     matrix[8][7] = fmtBits[6];
     matrix[8][8] = fmtBits[7];
     matrix[7][8] = fmtBits[8];
-    for (int i = 9; i < 15; i++) matrix[14 - i][8] = fmtBits[i];
+    for (int i = 9; i < 15; i++) {
+      matrix[14 - i][8] = fmtBits[i];
+    }
 
-    for (int i = 0; i < 7; i++) matrix[size - 1 - i][8] = fmtBits[i];
-    for (int i = 7; i < 15; i++) matrix[8][size - 15 + i] = fmtBits[i];
+    for (int i = 0; i < 7; i++) {
+      matrix[size - 1 - i][8] = fmtBits[i];
+    }
+    for (int i = 7; i < 15; i++) {
+      matrix[8][size - 15 + i] = fmtBits[i];
+    }
 
     // Convert to boolean matrix
     return matrix.map((row) => row.map((cell) => cell == 1).toList()).toList();
@@ -252,6 +259,7 @@ class QrCodePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final int count = matrix.length;
+    if (count == 0) return;
     final double cellSize = size.width / count;
     final bgPaint = Paint()..color = backgroundColor;
     final fgPaint = Paint()..color = color;
