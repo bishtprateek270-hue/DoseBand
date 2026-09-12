@@ -88,6 +88,138 @@ class _ScannerScreenState extends State<ScannerScreen> {
     }
   }
 
+  Future<void> _loadPresetImage(String filename, String presetLabel) async {
+    final possiblePaths = [
+      'test_images/$filename',
+      '../test_images/$filename',
+      'c:/Users/AYUSH/Desktop/AYUSH/flutter_work/DoseBand/test_images/$filename',
+    ];
+
+    File? foundFile;
+    for (final p in possiblePaths) {
+      final f = File(p);
+      if (f.existsSync()) {
+        foundFile = f;
+        break;
+      }
+    }
+
+    if (foundFile != null) {
+      final bytes = await foundFile.readAsBytes();
+      final workers = _workerService.workers;
+      setState(() {
+        _image = foundFile;
+        _imageBytes = bytes;
+        _imageFileName = filename;
+        _latestResult = null;
+        if (workers.isNotEmpty && _scanMode == 'full_badge') {
+          _identifiedWorker = workers.first;
+          _isWorkerIdentified = true;
+        }
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚡ Loaded Demo Preset: $presetLabel'),
+            backgroundColor: AppTheme.safetyOrange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      _analyzeStrip();
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Preset image $filename not found.'),
+            backgroundColor: AppTheme.unsafeRed,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showEmergencyEvacuationAlert(BuildContext context, DosimetryResult r) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF7F1D1D),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.white, size: 30),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'CRITICAL STEL BREACH ALERT',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.white, letterSpacing: -0.3),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('DETECTED EXPOSURE: ${r.estimatedH2sPpm.toStringAsFixed(1)} PPM H₂S',
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFFFCA5A5))),
+                  const SizedBox(height: 4),
+                  const Text('STEL CEILING LIMIT: 15.0 PPM (EXCEEDED)',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white70)),
+                  const SizedBox(height: 4),
+                  Text('AFFECTED WORKER: ${_identifiedWorker?.name ?? "Field Unit"} (${_identifiedWorker?.workerId ?? "W-DEMO"})',
+                      style: const TextStyle(fontSize: 11, color: Colors.white)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text('EMERGENCY ACTION PROTOCOL (OSHA 1910.1000):',
+                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: Colors.white)),
+            const SizedBox(height: 6),
+            const Text('1. Don Self-Contained Breathing Apparatus (SCBA) immediately.',
+                style: TextStyle(fontSize: 11, color: Colors.white70)),
+            const SizedBox(height: 4),
+            const Text('2. Evacuate Zone crosswind to designated Muster Point.',
+                style: TextStyle(fontSize: 11, color: Colors.white70)),
+            const SizedBox(height: 4),
+            const Text('3. Dispatch Safety Supervisor & Gas Isolation Crew.',
+                style: TextStyle(fontSize: 11, color: Colors.white70)),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF7F1D1D),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('🚨 Emergency alert logged to supervisory telemetry log.'),
+                  backgroundColor: AppTheme.unsafeRed,
+                ),
+              );
+            },
+            child: const Text('DISPATCH SAFETY CREW & EVACUATE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _verifyWorkerQr(ImageSource source) async {
     try {
       final picked = await _picker.pickImage(source: source, imageQuality: 95);
@@ -411,6 +543,16 @@ class _ScannerScreenState extends State<ScannerScreen> {
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Close', style: TextStyle(color: AppTheme.textMuted)),
           ),
+          if (r.estimatedH2sPpm >= 15.0 || r.riskLevel.contains('Unsafe'))
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.unsafeRed),
+              icon: const Icon(Icons.warning_amber_rounded, size: 16),
+              label: const Text('ALERT EVACUATION PROTOCOL'),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showEmergencyEvacuationAlert(context, r);
+              },
+            ),
           if (r.isValid && r.isAllowedToSave && _identifiedWorker != null)
             ElevatedButton.icon(
               icon: const Icon(Icons.save_rounded, size: 16),
@@ -588,6 +730,63 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         ? '• Full 3D Prototype: Validates grey enclosure, humidity card & worker QR verification.'
                         : '• Standalone Strip: Direct paper strip scanning with guided framing across all exposure shades.',
                     style: const TextStyle(fontSize: 10.5, color: AppTheme.textMuted, fontStyle: FontStyle.italic),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Judge Demo Quick Presets Card
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.safetyOrange.withValues(alpha: 0.5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.bolt, color: AppTheme.safetyOrange, size: 16),
+                      SizedBox(width: 6),
+                      Text(
+                        'JUDGE DEMO QUICK SCANS (1-TAP FAILSAFE)',
+                        style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        ActionChip(
+                          avatar: const Icon(Icons.check_circle_rounded, color: AppTheme.safeGreen, size: 14),
+                          label: const Text('0.0 ppm Clean Strip', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white)),
+                          backgroundColor: const Color(0xFF1E293B),
+                          side: const BorderSide(color: Color(0xFF334155)),
+                          onPressed: () => _loadPresetImage('real_strip_01_fresh_cream.jpg', '0.0 ppm Clean Baseline'),
+                        ),
+                        const SizedBox(width: 6),
+                        ActionChip(
+                          avatar: const Icon(Icons.warning_amber_rounded, color: AppTheme.cautionYellow, size: 14),
+                          label: const Text('8.5 ppm Shift TWA Warning', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white)),
+                          backgroundColor: const Color(0xFF1E293B),
+                          side: const BorderSide(color: Color(0xFF334155)),
+                          onPressed: () => _loadPresetImage('real_strip_04_warm_brownish_grey.jpg', '8.5 ppm Shift TWA Warning'),
+                        ),
+                        const SizedBox(width: 6),
+                        ActionChip(
+                          avatar: const Icon(Icons.dangerous_rounded, color: AppTheme.unsafeRed, size: 14),
+                          label: const Text('22.5 ppm STEL BREACH', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white)),
+                          backgroundColor: const Color(0xFF1E293B),
+                          side: const BorderSide(color: Color(0xFF334155)),
+                          onPressed: () => _loadPresetImage('real_strip_08_deep_solid_black.jpg', '22.5 ppm STEL BREACH'),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

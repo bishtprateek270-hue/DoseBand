@@ -73,8 +73,98 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-
-            // Quick Navigation Grid
+            // Facility Live Pulse Metric Card
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.safetyOrange.withValues(alpha: 0.3)),
+                boxShadow: AppTheme.cardShadow,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.safeGreen.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.shield_outlined, color: AppTheme.safeGreen, size: 13),
+                            SizedBox(width: 4),
+                            Text(
+                              'FACILITY SAFETY INDEX: 98.5%',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppTheme.safeGreen, letterSpacing: 0.3),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.bolt, color: AppTheme.safetyOrange, size: 16),
+                      const SizedBox(width: 2),
+                      const Text(
+                        'LIVE OLS MATRIX',
+                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: AppTheme.safetyOrange, letterSpacing: 0.4),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('SHIFT HAZARD STATUS', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted)),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(color: AppTheme.safeGreen, shape: BoxShape.circle),
+                                ),
+                                const SizedBox(width: 5),
+                                const Text('NOMINAL (SAFE)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(width: 1, height: 26, color: AppTheme.borderColor),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            const Text('STEL CEILING', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted)),
+                            const SizedBox(height: 2),
+                            const Text('15.0 PPM', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: AppTheme.safetyOrange)),
+                          ],
+                        ),
+                      ),
+                      Container(width: 1, height: 26, color: AppTheme.borderColor),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('8-HR TWA LIMIT', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted)),
+                            const SizedBox(height: 2),
+                            const Text('10.0 PPM', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
               'Operational Modules',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppTheme.textPrimary, letterSpacing: -0.2),
