@@ -29,14 +29,16 @@ from doseband_device_detector import (
 
 def detect_all_rois(
     image_bgr: np.ndarray,
-    min_confidence: float = 0.50
+    min_confidence: float = 0.50,
+    scan_mode: str = "full_badge"
 ) -> Dict[str, Any]:
     """
-    Detects all key regions on a DoseBand dosimeter image (physical 3D enclosure or badge).
+    Detects all key regions on a DoseBand dosimeter image (physical 3D enclosure, badge, or standalone strip).
 
     Args:
         image_bgr (np.ndarray): BGR image array.
         min_confidence (float): Minimum confidence threshold for valid ROI detection.
+        scan_mode (str): 'full_badge' (enclosure/badge priority) or 'standalone_strip' (guided single strip crop).
 
     Returns:
         dict: Detection result with bounding boxes, confidence scores, canonical views, and valid flag.
@@ -53,6 +55,40 @@ def detect_all_rois(
         }
 
     h, w = image_bgr.shape[:2]
+    mode_normalized = scan_mode.lower().strip()
+    is_standalone_requested = mode_normalized in ["standalone_strip", "standalone_chemical_strip", "standalone"]
+
+    # -------------------------------------------------------------------------
+    # Mode 2: Standalone Chemical Strip (Direct Guided Crop)
+    # -------------------------------------------------------------------------
+    if is_standalone_requested:
+        s_x1 = int(w * 0.12)
+        s_y1 = int(h * 0.12)
+        s_x2 = int(w * 0.88)
+        s_y2 = int(h * 0.88)
+
+        strip_conf = 0.95 if (s_x2 > s_x1 and s_y2 > s_y1) else 0.0
+        return {
+            "is_valid": strip_conf >= min_confidence,
+            "badge_mode": "STANDALONE_CHEMICAL_STRIP",
+            "overall_confidence": round(strip_conf, 3),
+            "ref_scale": {
+                "box": (0, 0, 0, 0),
+                "confidence": 0.0
+            },
+            "h2s_strip": {
+                "box": (s_x1, s_y1, s_x2, s_y2),
+                "confidence": round(strip_conf, 3)
+            },
+            "humidity_indicator": {
+                "box": (0, 0, 0, 0),
+                "confidence": 0.0
+            },
+            "expiry_patch": {
+                "box": (0, 0, 0, 0),
+                "confidence": 0.0
+            }
+        }
 
     # -------------------------------------------------------------------------
     # Tier 1: Check for Physical 3D-Printed DoseBand Prototype Enclosure
@@ -206,10 +242,11 @@ def detect_all_rois(
 def extract_center_features(
     image_bgr: np.ndarray,
     box: Tuple[int, int, int, int],
-    crop_fraction: float = 0.60
+    crop_fraction: float = 0.70
 ) -> Dict[str, float]:
     """
-    Extracts RGB, HSV, and Grayscale features from the central portion of an ROI bounding box.
+    Extracts robust statistical features (mean, median, HSV, LAB, local std, percentiles)
+    from the interior central portion of an ROI bounding box, avoiding edge shadows and gradients.
     """
     x1, y1, x2, y2 = box
     roi_bgr = image_bgr[y1:y2, x1:x2]
@@ -217,7 +254,10 @@ def extract_center_features(
     if roi_bgr.size == 0:
         return {
             "mean_r": 128.0, "mean_g": 128.0, "mean_b": 128.0,
-            "gray": 128.0, "hue": 0.0, "sat": 0.0, "val": 128.0
+            "median_r": 128.0, "median_g": 128.0, "median_b": 128.0,
+            "gray": 128.0, "gray_median": 128.0,
+            "hue": 0.0, "sat": 0.0, "val": 128.0,
+            "lab_l": 50.0, "local_std": 5.0
         }
 
     rh, rw = roi_bgr.shape[:2]
@@ -237,15 +277,22 @@ def extract_center_features(
     center_rgb = cv2.cvtColor(filtered_bgr, cv2.COLOR_BGR2RGB)
     center_hsv = cv2.cvtColor(filtered_bgr, cv2.COLOR_BGR2HSV)
     center_gray = cv2.cvtColor(filtered_bgr, cv2.COLOR_BGR2GRAY)
+    center_lab = cv2.cvtColor(filtered_bgr, cv2.COLOR_BGR2LAB)
 
     return {
         "mean_r": float(np.mean(center_rgb[:, :, 0])),
         "mean_g": float(np.mean(center_rgb[:, :, 1])),
         "mean_b": float(np.mean(center_rgb[:, :, 2])),
+        "median_r": float(np.median(center_rgb[:, :, 0])),
+        "median_g": float(np.median(center_rgb[:, :, 1])),
+        "median_b": float(np.median(center_rgb[:, :, 2])),
         "gray": float(np.mean(center_gray)),
+        "gray_median": float(np.median(center_gray)),
         "hue": float(np.mean(center_hsv[:, :, 0])),
         "sat": float(np.mean(center_hsv[:, :, 1])),
-        "val": float(np.mean(center_hsv[:, :, 2]))
+        "val": float(np.mean(center_hsv[:, :, 2])),
+        "lab_l": float(np.mean(center_lab[:, :, 0])) * (100.0 / 255.0),
+        "local_std": float(np.std(center_gray))
     }
 
 

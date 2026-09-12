@@ -355,17 +355,20 @@ async def validate_sensor_strip_only(
 @app.post("/scan/analyze", tags=["Dosimetry"])
 async def analyze_sensor_strip(
     image: UploadFile = File(...),
-    worker_id: str = Form("W-101"),
+    worker_id: Optional[str] = Form("W-101"),
     temperature_c: float = Form(25.0),
     humidity_rh: Optional[float] = Form(None),
     exposure_time_h: float = Form(1.0),
-    badge_mode: str = Form("STANDALONE_CHEMICAL_STRIP")
+    badge_mode: str = Form("STANDALONE_CHEMICAL_STRIP"),
+    scan_mode: Optional[str] = Form(None)
 ):
     """
     Executes end-to-end multi-ROI extraction, optical lighting correction,
     mandatory test-strip validation, and dual model ML prediction.
 
-    Returns the EXACT same prediction report as the working Web app.
+    Supports TWO scanning modes:
+    1. 'full_badge': Full physical DoseBand enclosure / reference badge scan with worker QR binding.
+    2. 'standalone_strip': Guided H2S chemical strip photo analysis with optional worker assignment.
     """
     try:
         contents = await image.read()
@@ -374,8 +377,15 @@ async def analyze_sensor_strip(
         if img_bgr is None:
             raise HTTPException(status_code=400, detail="Failed to decode image buffer. Please provide a valid JPG or PNG.")
 
+        # Determine effective scan mode ('full_badge' or 'standalone_strip')
+        effective_scan_mode = "full_badge"
+        if scan_mode:
+            effective_scan_mode = "standalone_strip" if "standalone" in scan_mode.lower() else "full_badge"
+        elif "standalone" in badge_mode.lower():
+            effective_scan_mode = "standalone_strip"
+
         # 1. Mandatory Test-Strip Physical & Optical Validation
-        strip_val_res = strip_validator.validate_test_strip(img_bgr)
+        strip_val_res = strip_validator.validate_test_strip(img_bgr, scan_mode=effective_scan_mode)
         is_strip_valid = strip_val_res["is_valid"]
         strip_val_status = strip_val_res["status"]
         strip_confidence_pct = strip_val_res["confidence_pct"]
@@ -385,10 +395,9 @@ async def analyze_sensor_strip(
 
         # 2. Quality Evaluation
         quality_diag = quality_validator.evaluate_image_quality(img_bgr)
-        is_quality_valid = quality_diag.get("is_valid_for_analysis", False)
 
         # 3. ROI Detections
-        roi_detections = roi_detector.detect_all_rois(img_bgr)
+        roi_detections = roi_detector.detect_all_rois(img_bgr, scan_mode=effective_scan_mode)
         detected_mode = roi_detections.get("badge_mode", badge_mode)
 
         if not is_strip_valid:
@@ -410,7 +419,11 @@ async def analyze_sensor_strip(
                     "risk_level": "Invalid",
                     "risk_color": "#EF4444",
                     "action_guidance": "Reposition valid chemical dosimeter strip under uniform lighting.",
+                    "scan_mode": effective_scan_mode,
                     "badge_mode": detected_mode,
+                    "is_standalone": (effective_scan_mode == "standalone_strip"),
+                    "is_prototype_estimate": True,
+                    "disclaimer": "Standalone strip analysis. Result depends on the current prototype calibration and is not a certified occupational H2S measurement.",
                     "validation_breakdown": breakdown,
                     "pre_flight_checks": {
                         "ref_scale": False,
@@ -427,30 +440,43 @@ async def analyze_sensor_strip(
             image_bgr=img_bgr,
             temperature_c=temperature_c,
             exposure_time_h=exposure_time_h,
-            manual_humidity_override=humidity_rh
+            manual_humidity_override=humidity_rh,
+            scan_mode=effective_scan_mode
         )
 
         # 5. Check Optical Expiry Patch if Full Badge
         is_optical_expired = False
         expiry_status_msg = "Physical Chemical Test Strip (Active)"
-        if detected_mode != "STANDALONE_CHEMICAL_STRIP":
+        if detected_mode != "STANDALONE_CHEMICAL_STRIP" and effective_scan_mode != "standalone_strip":
             exp_check = expiry_checker.check_badge_validity(img_bgr)
             is_optical_expired = exp_check.get("is_expired", False)
             expiry_status_msg = exp_check.get("status_message", "Valid — safe to use")
 
         # 6. Worker profile active & expiry verification
-        worker_profile = database.get_worker_by_id(worker_id)
+        worker_profile = None
         is_worker_active = True
         is_profile_expired = False
-        if worker_profile:
-            is_worker_active = (worker_profile.get("status") == "Active")
-            try:
-                exp_d = datetime.strptime(worker_profile.get("badge_expiry_date", "1970-01-01"), "%Y-%m-%d").date()
-                is_profile_expired = exp_d < date.today()
-            except Exception:
-                is_profile_expired = False
+        effective_wid = (worker_id or "").strip()
 
-        is_allowed_to_save = is_strip_valid and is_worker_active and not is_profile_expired and not is_optical_expired
+        if effective_wid and effective_wid not in ["W-DEMO", "DEMO", ""]:
+            worker_profile = database.get_worker_by_id(effective_wid)
+            if worker_profile:
+                is_worker_active = (worker_profile.get("status") == "Active")
+                try:
+                    exp_d = datetime.strptime(worker_profile.get("badge_expiry_date", "1970-01-01"), "%Y-%m-%d").date()
+                    is_profile_expired = exp_d < date.today()
+                except Exception:
+                    is_profile_expired = False
+            else:
+                # If in Full Badge mode and worker doesn't exist, block save
+                if effective_scan_mode == "full_badge":
+                    is_worker_active = False
+
+        # In standalone strip mode, saving is only allowed if an active registered worker is explicitly assigned
+        if effective_scan_mode == "standalone_strip":
+            is_allowed_to_save = bool(worker_profile and is_worker_active and not is_profile_expired)
+        else:
+            is_allowed_to_save = bool(is_strip_valid and worker_profile and is_worker_active and not is_profile_expired and not is_optical_expired)
 
         # Encode developer debug overlay as base64 JPEG
         debug_overlay_b64 = None
@@ -458,6 +484,8 @@ async def analyze_sensor_strip(
             success, enc_jpg = cv2.imencode(".jpg", inf_res["debug_overlay"])
             if success:
                 debug_overlay_b64 = base64.b64encode(enc_jpg.tobytes()).decode("utf-8")
+
+        is_standalone = (effective_scan_mode == "standalone_strip" or detected_mode == "STANDALONE_CHEMICAL_STRIP")
 
         return to_serializable({
             "is_valid": inf_res.get("is_valid", True),
@@ -477,7 +505,16 @@ async def analyze_sensor_strip(
             "risk_level": inf_res.get("risk_level", "Safe"),
             "risk_color": inf_res.get("risk_color", "#10B981"),
             "action_guidance": inf_res.get("action_guidance", "Within permissible 8-hr TWA limit. Safe to continue shift."),
+            "scan_mode": effective_scan_mode,
             "badge_mode": detected_mode,
+            "is_standalone": is_standalone,
+            "is_prototype_estimate": is_standalone,
+            "disclaimer": (
+                "PROTOTYPE ESTIMATE: Standalone strip scan is an uncalibrated visual estimation. "
+                "For safety compliance, scan inside the complete DoseBand enclosure with environmental sensors."
+                if is_standalone
+                else "Calibrated optical chemical dosimetry estimate. Maintain standard industrial hygiene and safety monitoring protocols."
+            ),
             "debug_overlay_base64": debug_overlay_b64,
             "is_badge_expired": is_profile_expired or is_optical_expired,
             "is_allowed_to_save": is_allowed_to_save,

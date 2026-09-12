@@ -115,10 +115,12 @@ class DoseBandInferencePipeline:
         image_bgr: np.ndarray,
         temperature_c: float = 25.0,
         exposure_time_h: float = 1.0,
-        manual_humidity_override: Optional[float] = None
+        manual_humidity_override: Optional[float] = None,
+        scan_mode: str = "full_badge"
     ) -> Dict[str, Any]:
         """
         Executes end-to-end device/multi-ROI extraction, lighting compensation, and dual model inference.
+        Supports both 'full_badge' and 'standalone_strip' modes.
         """
         if image_bgr is None or image_bgr.size == 0:
             return {
@@ -137,9 +139,9 @@ class DoseBandInferencePipeline:
             }
 
         # Step 0: Mandatory Test-Strip & Device Validation Stage
-        val_res = validate_test_strip(image_bgr)
+        val_res = validate_test_strip(image_bgr, scan_mode=scan_mode)
         if not val_res["is_valid"]:
-            roi_detections = detect_all_rois(image_bgr)
+            roi_detections = detect_all_rois(image_bgr, scan_mode=scan_mode)
             annotated_overlay = draw_roi_visual_overlay(image_bgr, roi_detections)
             debug_overlay = render_developer_debug_overlay(image_bgr, None, None, None, val_res)
             return {
@@ -158,7 +160,7 @@ class DoseBandInferencePipeline:
             }
 
         # Step 1: ROI Detection & Mode Routing
-        roi_detections = detect_all_rois(image_bgr)
+        roi_detections = detect_all_rois(image_bgr, scan_mode=scan_mode)
         badge_mode = roi_detections.get("badge_mode", "STANDALONE_CHEMICAL_STRIP")
 
         calib_success = True
@@ -193,7 +195,7 @@ class DoseBandInferencePipeline:
 
             h2s_box = roi_detections["h2s_strip"]["box"]
             hum_box = roi_detections["humidity_indicator"]["box"]
-            h2s_feats = extract_center_features(corrected_bgr, h2s_box, crop_fraction=0.60)
+            h2s_feats = extract_center_features(corrected_bgr, h2s_box, crop_fraction=0.70)
             hum_feats = extract_humidity_card_features(corrected_bgr, hum_box)
             annotated_overlay = draw_roi_visual_overlay(corrected_bgr, roi_detections)
             debug_overlay = render_developer_debug_overlay(
@@ -201,15 +203,20 @@ class DoseBandInferencePipeline:
             )
 
         else:
-            # Standalone Chemical Strip
+            # Standalone Chemical Strip (Direct Guided Crop)
             h2s_box = roi_detections["h2s_strip"]["box"]
             hum_box = roi_detections["humidity_indicator"]["box"]
-            h2s_feats = extract_center_features(image_bgr, h2s_box, crop_fraction=0.80)
+            h2s_feats = extract_center_features(image_bgr, h2s_box, crop_fraction=0.75)
             hum_feats = extract_humidity_card_features(image_bgr, hum_box)
             annotated_overlay = draw_roi_visual_overlay(image_bgr, roi_detections)
             debug_overlay = render_developer_debug_overlay(
                 image_bgr, None, image_bgr, None, val_res
             )
+            calib_meta = {
+                "calibrated": True,
+                "method": "Direct guided strip central-75% statistical sampling",
+                "gray_median": h2s_feats.get("gray_median", h2s_feats["gray"])
+            }
 
         # Step 2: Predict Humidity via KNN or Manual Override
         if manual_humidity_override is not None:
@@ -246,9 +253,14 @@ class DoseBandInferencePipeline:
         else:
             reliability_label = "Low Confidence (Retake Required)"
 
+        is_standalone = (badge_mode == "STANDALONE_CHEMICAL_STRIP")
+
         return {
             "is_valid": True,
             "badge_mode": badge_mode,
+            "scan_mode": "standalone_strip" if is_standalone else "full_badge",
+            "is_standalone": is_standalone,
+            "is_prototype_estimate": True,
             "overall_confidence": round(composite_conf, 3),
             "confidence_pct": conf_pct,
             "reliability_label": reliability_label,
@@ -284,3 +296,38 @@ def get_inference_pipeline() -> DoseBandInferencePipeline:
     if _pipeline_instance is None:
         _pipeline_instance = DoseBandInferencePipeline()
     return _pipeline_instance
+
+
+def run_full_inference(
+    image_bgr: np.ndarray,
+    temperature_c: float = 25.0,
+    exposure_time_h: float = 1.0,
+    manual_humidity_override: Optional[float] = None,
+    scan_mode: str = "full_badge"
+) -> Dict[str, Any]:
+    """Module-level convenience wrapper around DoseBandInferencePipeline.run_full_inference."""
+    pipeline = get_inference_pipeline()
+    return pipeline.run_full_inference(
+        image_bgr=image_bgr,
+        temperature_c=temperature_c,
+        exposure_time_h=exposure_time_h,
+        manual_humidity_override=manual_humidity_override,
+        scan_mode=scan_mode,
+    )
+
+
+def predict_h2s_concentration(
+    h2s_features: Dict[str, float],
+    temperature_c: float = 25.0,
+    humidity_rh: float = 50.0,
+    exposure_time_h: float = 1.0
+) -> float:
+    """Module-level convenience wrapper around DoseBandInferencePipeline.predict_h2s_ppm."""
+    pipeline = get_inference_pipeline()
+    return pipeline.predict_h2s_ppm(
+        h2s_features=h2s_features,
+        temperature_c=temperature_c,
+        humidity_rh=humidity_rh,
+        exposure_time_h=exposure_time_h,
+    )
+

@@ -28,6 +28,10 @@ class DosimetryResult {
   final List<String> rejectionReasons;
   final double temperatureC;
   final double predictedHumidity;
+  final String scanMode; // 'full_badge' | 'standalone_strip'
+  final bool isStandalone;
+  final bool isPrototypeEstimate;
+  final String? disclaimer;
   final String? debugOverlayBase64;
   final String? canonicalViewBase64;
   final String? deviceType;
@@ -49,6 +53,10 @@ class DosimetryResult {
     required this.badgeMode,
     required this.validationBreakdown,
     required this.preFlightChecks,
+    this.scanMode = 'full_badge',
+    this.isStandalone = false,
+    this.isPrototypeEstimate = false,
+    this.disclaimer,
     this.isBadgeExpired = false,
     this.isAllowedToSave = true,
     this.expiryStatusMessage = 'Active & Verified',
@@ -107,7 +115,8 @@ class DosimetryService {
     double temperatureC = 25.0,
     double? humidityRh,
     double exposureTimeHours = 1.0,
-    String badgeMode = 'STANDALONE_CHEMICAL_STRIP',
+    String badgeMode = 'FULL_DOSEBAND_BADGE',
+    String scanMode = 'full_badge',
   }) async {
     return analyzeImageBytes(
       bytes: imageBytes,
@@ -117,6 +126,7 @@ class DosimetryService {
       humidityRh: humidityRh ?? 50.0,
       exposureTimeHours: exposureTimeHours,
       badgeMode: badgeMode,
+      scanMode: scanMode,
     );
   }
 
@@ -131,7 +141,8 @@ class DosimetryService {
     required double temperatureC,
     required double humidityRh,
     required double exposureTimeHours,
-    String badgeMode = 'STANDALONE_CHEMICAL_STRIP',
+    String badgeMode = 'FULL_DOSEBAND_BADGE',
+    String scanMode = 'full_badge',
   }) async {
     try {
       final Uint8List bytes = await imageFile.readAsBytes();
@@ -145,6 +156,7 @@ class DosimetryService {
         humidityRh: humidityRh,
         exposureTimeHours: exposureTimeHours,
         badgeMode: badgeMode,
+        scanMode: scanMode,
       );
     } catch (e) {
       return _createFallbackErrorResult("Failed to read image file: $e");
@@ -159,7 +171,8 @@ class DosimetryService {
     required double temperatureC,
     required double humidityRh,
     required double exposureTimeHours,
-    String badgeMode = 'STANDALONE_CHEMICAL_STRIP',
+    String badgeMode = 'FULL_DOSEBAND_BADGE',
+    String scanMode = 'full_badge',
   }) async {
     if (bytes.isEmpty) {
       return _createFallbackErrorResult("Empty image byte stream.");
@@ -175,6 +188,7 @@ class DosimetryService {
         humidityRh: humidityRh,
         exposureTimeHours: exposureTimeHours,
         badgeMode: badgeMode,
+        scanMode: scanMode,
       );
 
       final bool isValid = apiResponse['is_valid'] == true;
@@ -189,7 +203,11 @@ class DosimetryService {
       final String riskColor = apiResponse['risk_color']?.toString() ?? '#10B981';
       final String actionGuidance = apiResponse['action_guidance']?.toString() ?? '';
       final String userMsg = apiResponse['user_message']?.toString() ?? (isValid ? 'Test strip optical verification passed.' : 'Verification failed.');
-      final String detectedMode = apiResponse['badge_mode']?.toString() ?? badgeMode;
+      final String detectedMode = apiResponse['badge_mode']?.toString() ?? (scanMode == 'standalone_strip' ? 'STANDALONE_H2S_STRIP' : 'FULL_DOSEBAND_BADGE');
+      final String effectiveScanMode = apiResponse['scan_mode']?.toString() ?? scanMode;
+      final bool isStandalone = apiResponse['is_standalone'] == true || effectiveScanMode == 'standalone_strip';
+      final bool isPrototypeEstimate = apiResponse['is_prototype_estimate'] == true || isStandalone;
+      final String? disclaimer = apiResponse['disclaimer']?.toString() ?? (isStandalone ? 'PROTOTYPE ESTIMATE: Standalone strip scan is an uncalibrated visual estimation. For safety compliance, scan inside the complete DoseBand enclosure with environmental sensors.' : null);
       final bool isExpired = apiResponse['is_badge_expired'] == true;
       final bool isAllowedToSave = apiResponse['is_allowed_to_save'] == true;
       final String expiryMsg = apiResponse['expiry_status_message']?.toString() ?? 'Active';
@@ -224,6 +242,10 @@ class DosimetryService {
         actionGuidance: actionGuidance,
         userMessage: userMsg,
         badgeMode: detectedMode,
+        scanMode: effectiveScanMode,
+        isStandalone: isStandalone,
+        isPrototypeEstimate: isPrototypeEstimate,
+        disclaimer: disclaimer,
         validationBreakdown: breakdown,
         preFlightChecks: preFlight,
         isBadgeExpired: isExpired,
@@ -235,7 +257,7 @@ class DosimetryService {
         predictedHumidity: (apiResponse['predicted_humidity'] ?? apiResponse['humidity'] as num?)?.toDouble() ?? humidityRh,
         debugOverlayBase64: apiResponse['debug_overlay_base64']?.toString(),
         canonicalViewBase64: apiResponse['canonical_view_base64']?.toString(),
-        deviceType: apiResponse['device_type']?.toString() ?? '3D_PRINTED_PROTOTYPE',
+        deviceType: apiResponse['device_type']?.toString() ?? (isStandalone ? 'STANDALONE_H2S_STRIP' : '3D_PRINTED_PROTOTYPE'),
         deviceGeometryValid: apiResponse['device_geometry_valid'] != false,
       );
     } catch (e) {

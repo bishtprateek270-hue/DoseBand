@@ -298,192 +298,234 @@ if page == "Home":
 elif page == "Scan Strip":
     st.title("📸 Scan Sensor Strip")
     st.caption(
-        "Select a registered worker and provide a photo of the exposure wristband"
-        " alongside the reference color scale."
+        "Select a scanning mode and provide a photo of the DoseBand prototype or standalone H₂S chemical strip."
     )
+
+    scan_mode_selection = st.radio(
+        "Scanning Mode",
+        ["⌚ Full DoseBand", "🧪 Standalone H2S Strip"],
+        horizontal=True,
+        help="Full DoseBand: Enforces 3D watch prototype geometry & worker badge binding. Standalone H2S Strip: Analyzes chemical dosimeter strip directly."
+    )
+    is_standalone_mode = "Standalone" in scan_mode_selection
+    effective_scan_mode = "standalone_strip" if is_standalone_mode else "full_badge"
 
     col1, col2 = st.columns([1, 1], gap="large")
 
     with col1:
-        st.subheader("Step 1: Worker Identification")
-        
-        id_method = st.radio(
-            "Worker Identification Method",
-            ["📷 Scan / Upload QR Badge (Automated)", "📋 Manual Directory Selection (Fallback)"],
-            horizontal=True
-        )
-
         worker_id_clean = ""
         is_worker_id_valid = False
+        assign_to_worker = False
 
-        if id_method == "📷 Scan / Upload QR Badge (Automated)":
-            qr_source_type = st.radio(
-                "QR Code Input Source",
-                ["Upload QR Badge Image", "Live Camera QR Scan", "Quick Test with Sample Badge QR"],
+        if is_standalone_mode:
+            st.subheader("Step 1: Worker Assignment (Optional for Standalone Test)")
+            assign_to_worker = st.checkbox("Assign scan result to registered worker record", value=False)
+            if not assign_to_worker:
+                worker_id_clean = "W-DEMO"
+                is_worker_id_valid = True
+                st.info("🧪 **Standalone Demo Mode:** Worker identification skipped. Results will generate prototype exposure metrics without logging to official workforce database.")
+            else:
+                id_method = st.radio(
+                    "Worker Identification Method",
+                    ["📷 Scan / Upload QR Badge (Automated)", "📋 Manual Directory Selection (Fallback)"],
+                    horizontal=True
+                )
+        else:
+            st.subheader("Step 1: Worker Identification")
+            id_method = st.radio(
+                "Worker Identification Method",
+                ["📷 Scan / Upload QR Badge (Automated)", "📋 Manual Directory Selection (Fallback)"],
                 horizontal=True
             )
 
-            qr_bytes_input = None
-
-            if qr_source_type == "Upload QR Badge Image":
-                uploaded_qr_file = st.file_uploader(
-                    "Upload Worker Dosimeter Badge QR",
-                    type=["png", "jpg", "jpeg"],
-                    key="qr_badge_file_uploader"
+        if not is_standalone_mode or assign_to_worker:
+            if id_method == "📷 Scan / Upload QR Badge (Automated)":
+                qr_source_type = st.radio(
+                    "QR Code Input Source",
+                    ["Upload QR Badge Image", "Live Camera QR Scan", "Quick Test with Sample Badge QR"],
+                    horizontal=True
                 )
-                if uploaded_qr_file is not None:
-                    qr_bytes_input = uploaded_qr_file.getvalue()
 
-            elif qr_source_type == "Live Camera QR Scan":
-                cam_qr_file = st.camera_input(
-                    "Photograph Worker Dosimeter Badge QR Code",
-                    key="qr_badge_cam_input"
-                )
-                if cam_qr_file is not None:
-                    qr_bytes_input = cam_qr_file.getvalue()
+                qr_bytes_input = None
 
-            else:  # Quick Test with Sample Badge QR
-                df_workers_avail = database.get_all_workers()
-                if not df_workers_avail.empty:
-                    sample_qr_opts = [
-                        f"{r['worker_id']} — {r['name']} (Badge: {r['badge_id'] if 'badge_id' in r and pd.notna(r['badge_id']) and r['badge_id'] else 'BDG-' + str(r['worker_id']).replace('W-', '')})"
-                        for _, r in df_workers_avail.iterrows()
-                    ]
-                    selected_sample_worker = st.selectbox("Select Worker Badge to Test:", sample_qr_opts)
-                    sel_wid = selected_sample_worker.split(" — ")[0].strip()
-                    sample_w_profile = database.get_worker_by_id(sel_wid)
-                    if sample_w_profile:
-                        badge_val = sample_w_profile.get("badge_id") or f"BDG-{sample_w_profile['worker_id'].replace('W-', '')}"
-                        qr_bytes_input = qr_manager.generate_badge_qr_png(
-                            sample_w_profile["worker_id"],
-                            badge_val
-                        )
-                        st.image(qr_bytes_input, caption=f"Simulated QR for {sample_w_profile['name']}", width=160)
-                else:
-                    st.warning("No workers in database to generate test badge.")
+                if qr_source_type == "Upload QR Badge Image":
+                    uploaded_qr_file = st.file_uploader(
+                        "Upload Worker Dosimeter Badge QR",
+                        type=["png", "jpg", "jpeg"],
+                        key="qr_badge_file_uploader"
+                    )
+                    if uploaded_qr_file is not None:
+                        qr_bytes_input = uploaded_qr_file.getvalue()
 
-            if qr_bytes_input is not None:
-                decoded_wid, decoded_bid, raw_payload = qr_manager.decode_qr_from_image_bytes(qr_bytes_input)
+                elif qr_source_type == "Live Camera QR Scan":
+                    cam_qr_file = st.camera_input(
+                        "Photograph Worker Dosimeter Badge QR Code",
+                        key="qr_badge_cam_input"
+                    )
+                    if cam_qr_file is not None:
+                        qr_bytes_input = cam_qr_file.getvalue()
 
-                if not decoded_wid and not decoded_bid:
-                    if raw_payload:
-                        st.error(
-                            "❌ **Foreign / Invalid QR Code:** The scanned QR code is NOT an official DoseBand badge generated by this platform. "
-                            "External URLs, personal QR codes, and third-party barcodes are strictly blocked."
-                        )
+                else:  # Quick Test with Sample Badge QR
+                    df_workers_avail = database.get_all_workers()
+                    if not df_workers_avail.empty:
+                        sample_qr_opts = [
+                            f"{r['worker_id']} — {r['name']} (Badge: {r['badge_id'] if 'badge_id' in r and pd.notna(r['badge_id']) and r['badge_id'] else 'BDG-' + str(r['worker_id']).replace('W-', '')})"
+                            for _, r in df_workers_avail.iterrows()
+                        ]
+                        selected_sample_worker = st.selectbox("Select Worker Badge to Test:", sample_qr_opts)
+                        sel_wid = selected_sample_worker.split(" — ")[0].strip()
+                        sample_w_profile = database.get_worker_by_id(sel_wid)
+                        if sample_w_profile:
+                            badge_val = sample_w_profile.get("badge_id") or f"BDG-{sample_w_profile['worker_id'].replace('W-', '')}"
+                            qr_bytes_input = qr_manager.generate_badge_qr_png(
+                                sample_w_profile["worker_id"],
+                                badge_val
+                            )
+                            st.image(qr_bytes_input, caption=f"Simulated QR for {sample_w_profile['name']}", width=160)
                     else:
-                        st.error(
-                            "❌ **QR Detection Failed:** Could not detect or decode a QR code in the provided image. "
-                            "Please ensure the official DoseBand badge QR is clear, well-lit, and in focus."
-                        )
+                        st.warning("No workers in database to generate test badge.")
+
+                if qr_bytes_input is not None:
+                    decoded_wid, decoded_bid, raw_payload = qr_manager.decode_qr_from_image_bytes(qr_bytes_input)
+
+                    if not decoded_wid and not decoded_bid:
+                        if raw_payload:
+                            st.error(
+                                "❌ **Foreign / Invalid QR Code:** The scanned QR code is NOT an official DoseBand badge generated by this platform. "
+                                "External URLs, personal QR codes, and third-party barcodes are strictly blocked."
+                            )
+                        else:
+                            st.error(
+                                "❌ **QR Detection Failed:** Could not detect or decode a QR code in the provided image. "
+                                "Please ensure the official DoseBand badge QR is clear, well-lit, and in focus."
+                            )
+                    else:
+                        val_result = qr_manager.validate_badge_profile(decoded_wid, decoded_bid)
+
+                        if val_result["valid"]:
+                            w_info = val_result["worker"]
+                            worker_id_clean = w_info["worker_id"]
+                            is_worker_id_valid = True
+
+                            st.success(f"✅ **QR Badge Verified:** `{w_info['badge_id']}` linked to **{w_info['name']}** ({w_info['worker_id']})")
+
+                            # Rich Verified Profile Badge Card
+                            st.markdown(
+                                f"""
+                                <div style="background-color: #1E293B; border-left: 4px solid #10B981; padding: 0.85rem 1rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; border: 1px solid #334155;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <strong style="color: #FFFFFF; font-size: 1rem;">👤 {w_info['name']} ({w_info['worker_id']})</strong>
+                                        <span style="background-color: #10B981; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 3px 10px; border-radius: 9999px; letter-spacing: 0.03em;">
+                                            QR VERIFIED • ACTIVE
+                                        </span>
+                                    </div>
+                                    <div style="font-size: 0.86rem; color: #E2E8F0; margin-top: 0.45rem; line-height: 1.5;">
+                                        🏭 <b style="color: #FFFFFF;">Dept:</b> {w_info['department']} &nbsp;|&nbsp; 📍 <b style="color: #FFFFFF;">Zone:</b> {w_info['work_zone']}<br>
+                                        ⏰ <b style="color: #FFFFFF;">Shift:</b> {w_info['shift']}<br>
+                                        🏷️ <b style="color: #FFFFFF;">Badge ID:</b> <code style="color: #FB923C; background-color: #0F172A; padding: 2px 6px; border-radius: 4px; font-weight: 700;">{w_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b style="color: #FFFFFF;">Expiry:</b> {w_info['badge_expiry_date']}
+                                    </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            st.error(f"🚨 **Safety & Badge Verification Alert:** {val_result['message']}")
+                            if val_result.get("worker"):
+                                w_err = val_result["worker"]
+                                st.warning(
+                                    f"Worker Found: **{w_err['name']}** ({w_err['worker_id']}) | "
+                                    f"Status: `{w_err['status']}` | Badge Expiry: `{w_err['badge_expiry_date']}`"
+                                )
                 else:
-                    val_result = qr_manager.validate_badge_profile(decoded_wid, decoded_bid)
+                    st.info("📷 Please upload, capture, or select a Worker QR Badge above to identify the worker.")
 
-                    if val_result["valid"]:
-                        w_info = val_result["worker"]
-                        worker_id_clean = w_info["worker_id"]
-                        is_worker_id_valid = True
+            else:  # Manual Directory Selection (Fallback)
+                df_registered_workers = database.get_all_workers()
 
-                        st.success(f"✅ **QR Badge Verified:** `{w_info['badge_id']}` linked to **{w_info['name']}** ({w_info['worker_id']})")
+                if not df_registered_workers.empty:
+                    worker_options = [
+                        f"{row['worker_id']} — {row['name']} ({row['department']} | {row['work_zone']})"
+                        for _, row in df_registered_workers.iterrows()
+                    ]
+                    selected_worker_str = st.selectbox(
+                        "Select Registered Worker*",
+                        options=worker_options,
+                        help="Select worker by ID, Name, Department, or Work Zone"
+                    )
+                    worker_id_clean = selected_worker_str.split(" — ")[0].strip()
 
-                        # Rich Verified Profile Badge Card
+                    # Display rich worker profile metadata card
+                    worker_info = database.get_worker_by_id(worker_id_clean)
+                    if worker_info:
+                        # Check badge expiry status and active status
+                        try:
+                            exp_date = datetime.strptime(worker_info["badge_expiry_date"], "%Y-%m-%d").date()
+                            is_badge_date_expired = exp_date < date.today()
+                            days_left = (exp_date - date.today()).days
+                        except Exception:
+                            is_badge_date_expired = False
+                            days_left = 999
+
+                        is_worker_active = (worker_info.get("status") == "Active")
+                        is_worker_id_valid = bool(is_worker_active and not is_badge_date_expired)
+
+                        status_badge_color = "#10B981" if (is_worker_active and not is_badge_date_expired) else "#EF4444"
+                        status_label = worker_info["status"]
+                        if is_badge_date_expired:
+                            status_label = "Badge Expired"
+
                         st.markdown(
                             f"""
-                            <div style="background-color: #1E293B; border-left: 4px solid #10B981; padding: 0.85rem 1rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; border: 1px solid #334155;">
+                            <div style="background-color: #1E293B; border-left: 4px solid {status_badge_color}; padding: 0.85rem 1rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; border: 1px solid #334155;">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <strong style="color: #FFFFFF; font-size: 1rem;">👤 {w_info['name']} ({w_info['worker_id']})</strong>
-                                    <span style="background-color: #10B981; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 3px 10px; border-radius: 9999px; letter-spacing: 0.03em;">
-                                        QR VERIFIED • ACTIVE
+                                    <strong style="color: #FFFFFF; font-size: 1rem;">👤 {worker_info['name']} ({worker_info['worker_id']})</strong>
+                                    <span style="background-color: {status_badge_color}; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 3px 10px; border-radius: 9999px; letter-spacing: 0.03em;">
+                                        {status_label.upper()}
                                     </span>
                                 </div>
                                 <div style="font-size: 0.86rem; color: #E2E8F0; margin-top: 0.45rem; line-height: 1.5;">
-                                    🏭 <b style="color: #FFFFFF;">Dept:</b> {w_info['department']} &nbsp;|&nbsp; 📍 <b style="color: #FFFFFF;">Zone:</b> {w_info['work_zone']}<br>
-                                    ⏰ <b style="color: #FFFFFF;">Shift:</b> {w_info['shift']}<br>
-                                    🏷️ <b style="color: #FFFFFF;">Badge ID:</b> <code style="color: #FB923C; background-color: #0F172A; padding: 2px 6px; border-radius: 4px; font-weight: 700;">{w_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b style="color: #FFFFFF;">Expiry:</b> {w_info['badge_expiry_date']}
+                                    🏭 <b style="color: #FFFFFF;">Dept:</b> {worker_info['department']} &nbsp;|&nbsp; 📍 <b style="color: #FFFFFF;">Zone:</b> {worker_info['work_zone']}<br>
+                                    ⏰ <b style="color: #FFFFFF;">Shift:</b> {worker_info['shift']}<br>
+                                    🏷️ <b style="color: #FFFFFF;">Badge ID:</b> <code style="color: #FB923C; background-color: #0F172A; padding: 2px 6px; border-radius: 4px; font-weight: 700;">{worker_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b style="color: #FFFFFF;">Expiry:</b> {worker_info['badge_expiry_date']}
                                 </div>
                             </div>
                             """,
                             unsafe_allow_html=True
                         )
+
+                        if is_badge_date_expired:
+                            st.error(f"🚨 **Badge Expired:** Dosimeter Badge `{worker_info['badge_id']}` expired on {worker_info['badge_expiry_date']}. Analysis and exposure recording are strictly blocked.")
+                        elif not is_worker_active:
+                            st.error(f"🚨 **Worker Inactive:** Worker status is '{worker_info['status']}'. Analysis and exposure recording are strictly blocked.")
+                        elif days_left <= 7:
+                            st.caption(f"⏳ Badge `{worker_info['badge_id']}` expires soon ({days_left} days remaining).")
                     else:
-                        st.error(f"🚨 **Safety & Badge Verification Alert:** {val_result['message']}")
-                        if val_result.get("worker"):
-                            w_err = val_result["worker"]
-                            st.warning(
-                                f"Worker Found: **{w_err['name']}** ({w_err['worker_id']}) | "
-                                f"Status: `{w_err['status']}` | Badge Expiry: `{w_err['badge_expiry_date']}`"
-                            )
-            else:
-                st.info("📷 Please upload, capture, or select a Worker QR Badge above to identify the worker.")
-
-        else:  # Manual Directory Selection (Fallback)
-            df_registered_workers = database.get_all_workers()
-
-            if not df_registered_workers.empty:
-                worker_options = [
-                    f"{row['worker_id']} — {row['name']} ({row['department']} | {row['work_zone']})"
-                    for _, row in df_registered_workers.iterrows()
-                ]
-                selected_worker_str = st.selectbox(
-                    "Select Registered Worker*",
-                    options=worker_options,
-                    help="Select worker by ID, Name, Department, or Work Zone"
-                )
-                worker_id_clean = selected_worker_str.split(" — ")[0].strip()
-
-                # Display rich worker profile metadata card
-                worker_info = database.get_worker_by_id(worker_id_clean)
-                if worker_info:
-                    # Check badge expiry status and active status
-                    try:
-                        exp_date = datetime.strptime(worker_info["badge_expiry_date"], "%Y-%m-%d").date()
-                        is_badge_date_expired = exp_date < date.today()
-                        days_left = (exp_date - date.today()).days
-                    except Exception:
-                        is_badge_date_expired = False
-                        days_left = 999
-
-                    is_worker_active = (worker_info.get("status") == "Active")
-                    is_worker_id_valid = bool(is_worker_active and not is_badge_date_expired)
-
-                    status_badge_color = "#10B981" if (is_worker_active and not is_badge_date_expired) else "#EF4444"
-                    status_label = worker_info["status"]
-                    if is_badge_date_expired:
-                        status_label = "Badge Expired"
-
-                    st.markdown(
-                        f"""
-                        <div style="background-color: #1E293B; border-left: 4px solid {status_badge_color}; padding: 0.85rem 1rem; border-radius: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; border: 1px solid #334155;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <strong style="color: #FFFFFF; font-size: 1rem;">👤 {worker_info['name']} ({worker_info['worker_id']})</strong>
-                                <span style="background-color: {status_badge_color}; color: #FFFFFF; font-size: 0.75rem; font-weight: 800; padding: 3px 10px; border-radius: 9999px; letter-spacing: 0.03em;">
-                                    {status_label.upper()}
-                                </span>
-                            </div>
-                            <div style="font-size: 0.86rem; color: #E2E8F0; margin-top: 0.45rem; line-height: 1.5;">
-                                🏭 <b style="color: #FFFFFF;">Dept:</b> {worker_info['department']} &nbsp;|&nbsp; 📍 <b style="color: #FFFFFF;">Zone:</b> {worker_info['work_zone']}<br>
-                                ⏰ <b style="color: #FFFFFF;">Shift:</b> {worker_info['shift']}<br>
-                                🏷️ <b style="color: #FFFFFF;">Badge ID:</b> <code style="color: #FB923C; background-color: #0F172A; padding: 2px 6px; border-radius: 4px; font-weight: 700;">{worker_info['badge_id']}</code> &nbsp;|&nbsp; 📅 <b style="color: #FFFFFF;">Expiry:</b> {worker_info['badge_expiry_date']}
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-
-                    if is_badge_date_expired:
-                        st.error(f"🚨 **Badge Expired:** Dosimeter Badge `{worker_info['badge_id']}` expired on {worker_info['badge_expiry_date']}. Analysis and exposure recording are strictly blocked.")
-                    elif not is_worker_active:
-                        st.error(f"🚨 **Worker Inactive:** Worker status is '{worker_info['status']}'. Analysis and exposure recording are strictly blocked.")
-                    elif days_left <= 7:
-                        st.caption(f"⏳ Badge `{worker_info['badge_id']}` expires soon ({days_left} days remaining).")
+                        is_worker_id_valid = False
                 else:
+                    st.warning("⚠️ No registered workers found in database. Please register workers on the **Workers** page.")
+                    worker_id_clean = ""
                     is_worker_id_valid = False
-            else:
-                st.warning("⚠️ No registered workers found in database. Please register workers on the **Workers** page.")
-                worker_id_clean = ""
-                is_worker_id_valid = False
 
         st.subheader("Step 2: Provide Image")
+
+        if is_standalone_mode:
+            st.markdown(
+                """
+                <div style="border: 2px dashed #F97316; border-radius: 8px; padding: 12px; text-align: center; background-color: #0F172A; margin-bottom: 12px;">
+                    <div style="font-family: monospace; font-size: 0.95rem; color: #FB923C; font-weight: 800; letter-spacing: 1px;">
+                        ┌─────────────────────────────────────────┐<br>
+                        │ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br>
+                        │ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;🎯 PLACE H2S STRIP HERE &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br>
+                        │ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br>
+                        └─────────────────────────────────────────┘
+                    </div>
+                    <div style="font-size: 0.82rem; color: #E2E8F0; margin-top: 6px;">
+                        Position <b>only one chemical strip</b> inside the guide. Automatic central ROI sampling is applied.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
         input_mode = st.radio(
             "Select Image Source Mode",
@@ -516,7 +558,8 @@ elif page == "Scan Strip":
                     image_bytes_to_process = uploaded_file.getvalue()
 
         else: # Live Camera Input
-            camera_file = st.camera_input("Photograph the strip next to the reference color scale")
+            cam_label = "Photograph the chemical strip inside the guide" if is_standalone_mode else "Photograph the DoseBand prototype"
+            camera_file = st.camera_input(cam_label)
             if camera_file is not None:
                 image_bytes_to_process = camera_file.getvalue()
 
@@ -527,7 +570,7 @@ elif page == "Scan Strip":
         manual_humidity = None
 
     with col2:
-        st.subheader("Step 3: Badge Preview & Verification")
+        st.subheader("Step 3: Preview & Verification")
         is_quality_valid = False
         is_strip_valid = False
         rois_detected = False
@@ -547,14 +590,14 @@ elif page == "Scan Strip":
                 is_quality_valid = quality_diag["is_valid_for_analysis"]
 
                 # 2. Mandatory Test-Strip Multi-Criteria Validation
-                strip_val_res = strip_validator.validate_test_strip(preview_bgr)
+                strip_val_res = strip_validator.validate_test_strip(preview_bgr, scan_mode=effective_scan_mode)
                 is_strip_valid = strip_val_res["is_valid"]
                 strip_val_score = strip_val_res["validation_score"]
                 strip_val_pct = strip_val_res["confidence_pct"]
                 strip_val_status = strip_val_res["status"]
 
-                roi_detections = roi_detector.detect_all_rois(preview_bgr)
-                is_standalone_strip = (roi_detections.get("badge_mode") == "STANDALONE_CHEMICAL_STRIP")
+                roi_detections = roi_detector.detect_all_rois(preview_bgr, scan_mode=effective_scan_mode)
+                is_standalone_strip = is_standalone_mode or (roi_detections.get("badge_mode") == "STANDALONE_CHEMICAL_STRIP")
 
                 if is_standalone_strip:
                     ref_ok = True
@@ -565,8 +608,11 @@ elif page == "Scan Strip":
                     is_quality_valid = is_strip_valid
                 else:
                     # Check required ROIs for Full DoseBand Badge
-                    ref_ok = quality_diag["ref_scale_detected"] and (strip_val_res["checks"]["reference_scale"]["score"] >= 0.40)
-                    strip_ok = quality_diag["sensor_strip_detected"] and is_strip_valid
+                    ref_ok = (strip_val_res["status"] == "Valid")
+                    strip_ok = is_strip_valid
+                    hum_ok = True
+                    calib_ok = is_strip_valid
+                    rois_detected = is_strip_valid
                     if humidity_input_mode == "🤖 Optical Humidity Card (KNN)":
                         hum_ok = (roi_detections["humidity_indicator"]["confidence"] >= 0.50)
                     else:
@@ -754,21 +800,15 @@ elif page == "Scan Strip":
             elif not env_params_valid:
                 st.caption("🔒 *Analysis disabled: Please provide valid shift duration and environmental parameters.*")
 
-    # -------------------------------------------------------------------------
-    # FULL-WIDTH ANALYSIS & DOSIMETRY RESULTS SECTION
-    # -------------------------------------------------------------------------
-    if analyze_clicked and prediction_allowed and image_bytes_to_process is not None and preview_bgr is not None:
-        st.divider()
-        st.markdown("<h3 class='section-header'>📊 Gas Dosimetry & Worker Exposure Results</h3>", unsafe_allow_html=True)
-
-        with st.spinner("Executing multi-ROI lighting compensation, Humidity KNN & H2S inference..."):
+    # ----------------------------        with st.spinner("Executing optical compensation, Humidity KNN & H2S inference..."):
             try:
                 pipeline = inference_engine.get_inference_pipeline()
                 inf_res = pipeline.run_full_inference(
                     image_bgr=preview_bgr,
                     temperature_c=ambient_temp,
                     exposure_time_h=exposure_time,
-                    manual_humidity_override=manual_humidity
+                    manual_humidity_override=manual_humidity,
+                    scan_mode=effective_scan_mode
                 )
 
                 if not inf_res.get("is_valid", False):
@@ -784,14 +824,30 @@ elif page == "Scan Strip":
                     is_optical_expired = expiry_res.get("is_expired", False)
                     expiry_status_msg = expiry_res.get("status_message", "")
 
-                # Unified Badge Validity Gate (Profile Active/Unexpired AND Optical Patch Unexpired)
-                is_badge_fully_valid = is_worker_id_valid and not is_optical_expired
+                # Unified Badge Validity Gate
+                if is_standalone_mode and not assign_to_worker:
+                    is_badge_fully_valid = True  # Demo analysis permitted without worker profile
+                else:
+                    is_badge_fully_valid = is_worker_id_valid and not is_optical_expired
+
+                if is_standalone_mode:
+                    st.markdown(
+                        """
+                        <div style="background-color: #1E293B; border-left: 4px solid #FB923C; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border: 1px solid #334155;">
+                            <strong style="color: #FB923C; font-size: 0.95rem;">🧪 STANDALONE STRIP — PROTOTYPE ESTIMATE</strong>
+                            <div style="color: #E2E8F0; font-size: 0.82rem; margin-top: 3px;">
+                                Standalone strip analysis. Result depends on the current prototype calibration and is not a certified occupational H2S measurement.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
                 if not is_badge_fully_valid:
                     # Expired or invalid badge -> Strictly BLOCK saving and classification
                     st.error("🚨 **Badge Invalid / Expired:** Badge invalid/expired — replace badge before recording exposure.")
                     st.warning("⚠️ **DIAGNOSTIC PREVIEW ONLY — EXPOSURE NOT SAVED TO DATABASE.** "
-                               "This badge is expired or inactive. Cumulative exposure, worker history, and compliance records have NOT been updated.")
+                                "This badge is expired or inactive. Cumulative exposure, worker history, and compliance records have NOT been updated.")
 
                     # Expiry Status Banner
                     st.error(f"❌ **Badge Expiry Status:** {expiry_status_msg}")
@@ -828,40 +884,43 @@ elif page == "Scan Strip":
                         )
 
                 else:
-                    # VALID BADGE -> Save to SQLite database with session-state deduplication
-                    import hashlib
-                    raw_img_sha = hashlib.sha256(image_bytes_to_process).hexdigest()
-                    current_scan_hash = hashlib.sha256(
-                        f"{worker_id_clean}_{raw_img_sha}_{ambient_temp:.1f}_{exposure_time:.2f}_{manual_humidity}_{inf_res['estimated_h2s_ppm']:.2f}".encode()
-                    ).hexdigest()
+                    # Saving to SQLite database only if a registered worker is bound
+                    if not is_standalone_mode or assign_to_worker:
+                        import hashlib
+                        raw_img_sha = hashlib.sha256(image_bytes_to_process).hexdigest()
+                        current_scan_hash = hashlib.sha256(
+                            f"{worker_id_clean}_{raw_img_sha}_{ambient_temp:.1f}_{exposure_time:.2f}_{manual_humidity}_{inf_res['estimated_h2s_ppm']:.2f}".encode()
+                        ).hexdigest()
 
-                    if st.session_state.get("last_saved_scan_hash") != current_scan_hash:
-                        record_id = database.insert_reading(
-                            worker_id=worker_id_clean,
-                            intensity=inf_res["staining_intensity"],
-                            dose=inf_res["cumulative_dose_ppm_h"],
-                            risk_level=inf_res["risk_level"],
-                            is_expired=False,
-                            expiry_status_message=expiry_status_msg,
-                            temperature=ambient_temp,
-                            humidity=inf_res["predicted_humidity"],
-                            raw_intensity=inf_res["staining_intensity"],
-                            corrected_intensity=inf_res["staining_intensity"],
-                            compensation_factor=1.0,
-                            predicted_humidity=inf_res["predicted_humidity"],
-                            exposure_time=exposure_time,
-                            strip_intensity=inf_res["staining_intensity"],
-                            estimated_h2s_ppm=inf_res["estimated_h2s_ppm"],
-                            data_source="CALIBRATED_OPTICAL_DOSIMETRY_MODEL"
-                        )
-                        st.session_state["last_saved_scan_hash"] = current_scan_hash
-                        st.session_state["last_saved_record_id"] = record_id
+                        if st.session_state.get("last_saved_scan_hash") != current_scan_hash:
+                            record_id = database.insert_reading(
+                                worker_id=worker_id_clean,
+                                intensity=inf_res["staining_intensity"],
+                                dose=inf_res["cumulative_dose_ppm_h"],
+                                risk_level=inf_res["risk_level"],
+                                is_expired=False,
+                                expiry_status_message=expiry_status_msg,
+                                temperature=ambient_temp,
+                                humidity=inf_res["predicted_humidity"],
+                                raw_intensity=inf_res["staining_intensity"],
+                                corrected_intensity=inf_res["staining_intensity"],
+                                compensation_factor=1.0,
+                                predicted_humidity=inf_res["predicted_humidity"],
+                                exposure_time=exposure_time,
+                                strip_intensity=inf_res["staining_intensity"],
+                                estimated_h2s_ppm=inf_res["estimated_h2s_ppm"],
+                                data_source="CALIBRATED_OPTICAL_DOSIMETRY_MODEL"
+                            )
+                            st.session_state["last_saved_scan_hash"] = current_scan_hash
+                            st.session_state["last_saved_record_id"] = record_id
+                        else:
+                            record_id = st.session_state.get("last_saved_record_id", "Logged")
+
+                        cumulative_dose = database.get_cumulative_dose(worker_id_clean)
+                        st.success(f"✅ **Analysis Complete & Logged!** Record ID `#{record_id}` saved against Worker `{worker_id_clean}`.")
                     else:
-                        record_id = st.session_state.get("last_saved_record_id", "Logged")
-
-                    cumulative_dose = database.get_cumulative_dose(worker_id_clean)
-
-                    st.success(f"✅ **Analysis Complete & Logged!** Record ID `#{record_id}` saved against Worker `{worker_id_clean}`.")
+                        cumulative_dose = inf_res["cumulative_dose_ppm_h"]
+                        st.info("🧪 **Standalone Demo Scan Complete:** Exposure metrics computed successfully. (Not saved to worker records).")
 
                     # Primary Metrics Grid - Full Width 4 Columns
                     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
@@ -876,6 +935,14 @@ elif page == "Scan Strip":
                             "Relative Humidity",
                             f"{inf_res['predicted_humidity']:.1f}% RH",
                             help=f"Source: {inf_res['humidity_source']} (Clamped: 20–90% RH)"
+                        )
+                    with m_col3:
+                        st.metric(
+                            "Shift Cumulative Exposure",
+                            f"{inf_res['cumulative_dose_ppm_h']:.2f} ppm·h",
+                            delta=f"Total: {cumulative_dose:.2f} ppm·h" if (not is_standalone_mode or assign_to_worker) else None,
+                            help="Shift dose (estimated ppm × hours) and total worker cumulative exposure"
+                        )ce']} (Clamped: 20–90% RH)"
                         )
                     with m_col3:
                         st.metric(

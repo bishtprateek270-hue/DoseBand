@@ -152,7 +152,8 @@ class ApiService {
     required double temperatureC,
     double? humidityRh,
     required double exposureTimeHours,
-    String badgeMode = 'STANDALONE_CHEMICAL_STRIP',
+    String badgeMode = 'FULL_DOSEBAND_BADGE',
+    String scanMode = 'full_badge',
   }) async {
     final stopwatch = Stopwatch()..start();
     final url = AppConfig.scanAnalyzeEndpoint;
@@ -177,7 +178,8 @@ class ApiService {
         addField('humidity_rh', humidityRh.toString());
       }
       addField('exposure_time_h', exposureTimeHours.toString());
-      addField('badge_mode', badgeMode);
+      addField('badge_mode', scanMode == 'standalone_strip' ? 'STANDALONE_H2S_STRIP' : badgeMode);
+      addField('scan_mode', scanMode);
 
       // File Field
       bodyBytes.addAll(utf8.encode('--$boundary\r\n'));
