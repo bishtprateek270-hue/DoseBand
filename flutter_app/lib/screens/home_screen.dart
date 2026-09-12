@@ -75,105 +75,6 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Executive Hero Card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: AppTheme.navyHeroGradient,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0xFF334155)),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0F172A).withValues(alpha: 0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                        ),
-                        child: const Row(
-                          children: [
-                            Text('⚡', style: TextStyle(fontSize: 12)),
-                            SizedBox(width: 4),
-                            Text(
-                              'OPTICAL SENSOR MATRIX',
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF38BDF8),
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: unsafeWorkers == 0
-                              ? const Color(0xFF065F46).withValues(alpha: 0.8)
-                              : const Color(0xFF991B1B).withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          unsafeWorkers == 0 ? 'STATUS: NOMINAL' : 'ALERTS: $unsafeWorkers UNSAFE',
-                          style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'DoseBand Calibrated Dosimeter',
-                    style: TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFFFB923C),
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Real-time colorimetric computer vision pipeline with Ordinary Least Squares (OLS) per-channel white-balance illumination correction.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFFCBD5E1), height: 1.4),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF334155)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildHeroStat('ACTIVE WORKFORCE', '$activeWorkers', const Color(0xFF34D399)),
-                        Container(width: 1, height: 28, color: const Color(0xFF334155)),
-                        _buildHeroStat('STEL CEILING', '15.0 ppm', const Color(0xFFFB923C)),
-                        Container(width: 1, height: 28, color: const Color(0xFF334155)),
-                        _buildHeroStat('8-HR TWA LIMIT', '10.0 ppm', const Color(0xFF38BDF8)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
             // Quick Navigation Grid
             const Text(
               'Operational Modules',
@@ -300,19 +201,6 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildHeroStat(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: color)),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: Color(0xFF94A3B8), letterSpacing: 0.4),
-        ),
-      ],
     );
   }
 

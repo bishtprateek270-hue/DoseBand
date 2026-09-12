@@ -278,18 +278,25 @@ if page == "Home":
         )
 
     with col2:
+        st.subheader("Operational Modules")
         st.markdown(
             """
-            <div class="icon-card">
-                <h2>⌚️☣️</h2>
-                <h3>DoseBand Optical Dosimeter</h3>
-                <p>Real-time optical colorimetric dosimetry for field worker safety</p>
-                <div style="margin-top: 1.5rem; font-size: 0.85rem; color: #EA580C; font-weight: 600;">
-                    DEVELOPED BY TEAM DOSEBAND
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-left: 4px solid #EA580C; padding: 0.85rem 1rem; border-radius: 8px;">
+                    <b style="color: #0F172A;">📸 1. Scan Sensor Strip</b><br>
+                    <span style="font-size: 0.85rem; color: #64748B;">Full DoseBand 3D prototype & standalone H₂S strip inspection.</span>
+                </div>
+                <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-left: 4px solid #0284C7; padding: 0.85rem 1rem; border-radius: 8px;">
+                    <b style="color: #0F172A;">👷 2. Worker Directory</b><br>
+                    <span style="font-size: 0.85rem; color: #64748B;">Personnel profiles, badges, active shifts, and zones.</span>
+                </div>
+                <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-left: 4px solid #8B5CF6; padding: 0.85rem 1rem; border-radius: 8px;">
+                    <b style="color: #0F172A;">📊 3. Live Dashboard</b><br>
+                    <span style="font-size: 0.85rem; color: #64748B;">DGMS safety metrics, TWA/STEL limit alerts & SQLite audit trail.</span>
                 </div>
             </div>
             """,
-            unsafe_allow_html=True,
+            unsafe_allow_html=True
         )
 
 # -----------------------------------------------------------------------------

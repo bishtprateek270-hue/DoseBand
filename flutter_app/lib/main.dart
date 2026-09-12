@@ -69,11 +69,14 @@ class _MainNavigationState extends State<MainNavigation> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
-              Icon(Icons.hub_rounded, color: AppTheme.safetyOrange, size: 22),
+              Icon(Icons.hub_rounded, color: AppTheme.safetyOrange, size: 20),
               SizedBox(width: 8),
-              Text(
-                'Server & Device Connection',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: AppTheme.textPrimary),
+              Expanded(
+                child: Text(
+                  'Server & Device Connection',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: AppTheme.textPrimary),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
