@@ -162,10 +162,27 @@ def generate_safety_report_data(
     }
 
 
-def generate_pdf_report(report_data: Dict[str, Any]) -> bytes:
+def generate_pdf_report(
+    report_data: Optional[Dict[str, Any]] = None,
+    worker_id_filter: str = "All Workers",
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    generated_by: str = "DoseBand Industrial Safety Officer",
+    db_path: str = database.DEFAULT_DB_PATH
+) -> bytes:
     """
     Generates a professional PDF industrial safety report using ReportLab.
+    Accepts pre-computed report_data dictionary or generates it dynamically from filters.
     """
+    if report_data is None:
+        report_data = generate_safety_report_data(
+            worker_id_filter=worker_id_filter,
+            start_date=start_date,
+            end_date=end_date,
+            db_path=db_path
+        )
+    
+    report_data.setdefault("generated_by", generated_by)
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,

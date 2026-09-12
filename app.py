@@ -966,6 +966,8 @@ elif page == "Scan Strip":
                             """,
                             unsafe_allow_html=True
                         )
+            except Exception as e:
+                st.error(f"🚨 **Analysis Pipeline Error:** An unexpected error occurred during inference: {str(e)}")
 
 # -----------------------------------------------------------------------------
 # PAGE 3: WORKERS
