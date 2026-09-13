@@ -269,9 +269,9 @@ class DosimetryService {
     // 2. Standalone Local Fallback Engine (Runs if server is unreachable)
     ColorSample sample;
     try {
-      sample = await _extractColorSampleFromUi(bytes);
+      sample = await _extractColorSampleFromUi(bytes, scanMode: scanMode);
     } catch (_) {
-      sample = _extractColorSampleFromBytes(bytes);
+      sample = _extractColorSampleFromBytes(bytes, scanMode: scanMode);
     }
 
     return _evaluateDosimetryLocal(
@@ -290,12 +290,13 @@ class DosimetryService {
     required double humidityRh,
     required double exposureTimeHours,
     String badgeMode = 'STANDALONE_CHEMICAL_STRIP',
+    String scanMode = 'standalone_strip',
   }) {
     if (bytes.isEmpty) {
       return _createFallbackErrorResult("Empty image byte stream.");
     }
 
-    final ColorSample sample = _extractColorSampleFromBytes(bytes);
+    final ColorSample sample = _extractColorSampleFromBytes(bytes, scanMode: scanMode);
     return _evaluateDosimetryLocal(
       sample: sample,
       temperatureC: temperatureC,
@@ -422,12 +423,12 @@ class DosimetryService {
 
   /// 6-Criteria Physical Test Strip Validation
   Map<String, dynamic> _validateStrip(ColorSample sample, String badgeMode) {
-    final double satScore = (1.0 - (sample.s / 75.0)).clamp(0.0, 1.0);
-    final bool isChromatic = sample.s > 75.0;
+    final double satScore = (1.0 - (sample.s / 35.0)).clamp(0.0, 1.0);
+    final bool isChromatic = sample.s > 35.0;
     final double lumScore = (sample.v >= 30.0 && sample.v <= 245.0) ? 0.95 : 0.20;
-    final bool isExtremeLighting = sample.v < 25.0 || sample.v > 248.0;
+    final bool isExtremeLighting = sample.v < 20.0 || sample.v > 250.0;
 
-    final bool isAcceptablePaperTexture = sample.contrastVariance >= 0.002 && sample.contrastVariance <= 0.60;
+    final bool isAcceptablePaperTexture = sample.contrastVariance <= 0.15;
     final double textureScore = isAcceptablePaperTexture ? 0.95 : 0.30;
     final bool isQrCodeOrBinary = sample.isBinaryPattern || (sample.extremeContrastCount > 0.38 && sample.s < 20);
     final double alignmentScore = badgeMode == 'STANDALONE_CHEMICAL_STRIP' ? 0.92 : 0.88;
@@ -505,24 +506,32 @@ class DosimetryService {
   }
 
   /// High-fidelity pixel extraction using Flutter ui.Codec
-  Future<ColorSample> _extractColorSampleFromUi(Uint8List bytes) async {
+  Future<ColorSample> _extractColorSampleFromUi(Uint8List bytes, {String scanMode = 'full_badge'}) async {
     final ui.Codec codec = await ui.instantiateImageCodec(bytes);
     final ui.FrameInfo frameInfo = await codec.getNextFrame();
     final ui.Image image = frameInfo.image;
     final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
 
     if (byteData == null) {
-      return _extractColorSampleFromBytes(bytes);
+      return _extractColorSampleFromBytes(bytes, scanMode: scanMode);
     }
 
     final int width = image.width;
     final int height = image.height;
     final Uint8List pixels = byteData.buffer.asUint8List();
 
-    final int startX = (width * 0.20).toInt();
-    final int endX = (width * 0.80).toInt();
-    final int startY = (height * 0.20).toInt();
-    final int endY = (height * 0.80).toInt();
+    int startX, endX, startY, endY;
+    if (scanMode == 'standalone_strip') {
+      startX = (width * 0.40).toInt();
+      endX = (width * 0.60).toInt();
+      startY = (height * 0.40).toInt();
+      endY = (height * 0.60).toInt();
+    } else {
+      startX = (width * 0.40).toInt();
+      endX = (width * 0.60).toInt();
+      startY = (height * 0.45).toInt();
+      endY = (height * 0.55).toInt();
+    }
 
     int totalR = 0, totalG = 0, totalB = 0;
     int sampleCount = 0;
@@ -530,6 +539,7 @@ class DosimetryService {
     int brightPixelCount = 0;
 
     final List<double> lumValues = [];
+    final List<double> vValues = [];
     final int stepX = math.max(1, (endX - startX) ~/ 60);
     final int stepY = math.max(1, (endY - startY) ~/ 60);
 
@@ -548,6 +558,7 @@ class DosimetryService {
 
           final double lum = 0.299 * r + 0.587 * g + 0.114 * b;
           lumValues.add(lum);
+          vValues.add(math.max(r, math.max(g, b)).toDouble());
 
           if (lum < 35.0) darkPixelCount++;
           if (lum > 225.0) brightPixelCount++;
@@ -561,11 +572,14 @@ class DosimetryService {
     final double meanG = (totalG / sampleCount).clamp(0.0, 255.0);
     final double meanB = (totalB / sampleCount).clamp(0.0, 255.0);
 
+    vValues.sort();
+    final double medianV = vValues.isNotEmpty ? vValues[vValues.length ~/ 2] : 200.0;
+
     final double maxVal = math.max(meanR, math.max(meanG, meanB));
     final double minVal = math.min(meanR, math.min(meanG, meanB));
     final double delta = maxVal - minVal;
 
-    final double v = maxVal;
+    final double v = medianV; // Use median Value for robust estimation independent of tiny imperfections
     final double s = maxVal == 0 ? 0.0 : (delta / maxVal) * 255.0;
 
     double sumSqDiff = 0.0;
@@ -590,68 +604,12 @@ class DosimetryService {
     );
   }
 
-  ColorSample _extractColorSampleFromBytes(Uint8List bytes) {
-    if (bytes.length < 54) {
-      return ColorSample(r: 200, g: 200, b: 200, v: 200, s: 5, contrastVariance: 0.05, isBinaryPattern: false, extremeContrastCount: 0.0);
-    }
-
-    int totalR = 0, totalG = 0, totalB = 0;
-    int sampleCount = 0;
-    int darkPixelCount = 0;
-    int brightPixelCount = 0;
-    final int step = math.max(1, bytes.length ~/ 600);
-
-    final List<double> lumValues = [];
-
-    for (int i = 0; i < bytes.length - 3; i += step) {
-      final int b1 = bytes[i];
-      final int b2 = bytes[i + 1];
-      final int b3 = bytes[i + 2];
-
-      totalR += b1;
-      totalG += b2;
-      totalB += b3;
-      sampleCount++;
-
-      final double lum = (b1 + b2 + b3) / 3.0;
-      lumValues.add(lum);
-
-      if (lum < 35) darkPixelCount++;
-      if (lum > 225) brightPixelCount++;
-    }
-
-    if (sampleCount == 0) sampleCount = 1;
-
-    final double meanR = (totalR / sampleCount).clamp(0.0, 255.0);
-    final double meanG = (totalG / sampleCount).clamp(0.0, 255.0);
-    final double meanB = (totalB / sampleCount).clamp(0.0, 255.0);
-
-    final double maxVal = math.max(meanR, math.max(meanG, meanB));
-    final double minVal = math.min(meanR, math.min(meanG, meanB));
-    final double delta = maxVal - minVal;
-
-    final double v = maxVal;
-    final double s = maxVal == 0 ? 0.0 : (delta / maxVal) * 255.0;
-
-    double sumSqDiff = 0.0;
-    final double meanLum = lumValues.isEmpty ? v : (lumValues.reduce((a, b) => a + b) / lumValues.length);
-    for (final l in lumValues) {
-      sumSqDiff += (l - meanLum) * (l - meanLum);
-    }
-    final double stdLum = lumValues.isEmpty ? 5.0 : math.sqrt(sumSqDiff / lumValues.length);
-
-    final double extremeFraction = (darkPixelCount + brightPixelCount) / sampleCount;
-    final bool isBinaryPattern = darkPixelCount > (sampleCount * 0.20) && brightPixelCount > (sampleCount * 0.25);
-
+  ColorSample _extractColorSampleFromBytes(Uint8List bytes, {String scanMode = 'full_badge'}) {
+    // Fallback: If image couldn't be decoded by UI, return a high-contrast/invalid sample
+    // to ensure it gets correctly rejected by validation.
     return ColorSample(
-      r: meanR,
-      g: meanG,
-      b: meanB,
-      v: v,
-      s: s,
-      contrastVariance: (stdLum / 128.0).clamp(0.0, 1.0),
-      isBinaryPattern: isBinaryPattern,
-      extremeContrastCount: extremeFraction,
+      r: 200, g: 200, b: 200, v: 200, s: 100, // s=100 ensures isChromatic = true -> rejected
+      contrastVariance: 1.0, isBinaryPattern: false, extremeContrastCount: 0.0,
     );
   }
 

@@ -248,13 +248,14 @@ class WorkerService extends ChangeNotifier {
     String? fileName,
   }) async {
     // 1. Try server verification first if connected
+    Map<String, dynamic>? apiRes;
     try {
-      final res = await _apiService.verifyBadgeQr(
+      apiRes = await _apiService.verifyBadgeQr(
         imageBytes: imageBytes,
         rawPayload: rawPayload,
       );
-      if (res['valid'] == true && res['worker'] != null) {
-        return res;
+      if (apiRes['valid'] == true && apiRes['worker'] != null) {
+        return apiRes;
       }
     } catch (_) {
       // Backend unreachable or offline -> fallback to robust local database verification
@@ -263,11 +264,11 @@ class WorkerService extends ChangeNotifier {
     // 2. Parse raw payload JSON if available
     String? decodedWid;
     String? decodedBid;
-    String? payloadStr = rawPayload;
+    String? payloadStr = rawPayload ?? (apiRes != null ? apiRes['raw_payload']?.toString() : null);
 
-    if (rawPayload != null && rawPayload.trim().isNotEmpty) {
+    if (payloadStr != null && payloadStr.trim().isNotEmpty) {
       try {
-        final parsed = jsonDecode(rawPayload.trim());
+        final parsed = jsonDecode(payloadStr.trim());
         if (parsed is Map && parsed['app'] == 'DoseBand') {
           decodedWid = parsed['worker_id']?.toString();
           decodedBid = parsed['badge_id']?.toString();
