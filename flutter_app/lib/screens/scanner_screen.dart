@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,6 +7,7 @@ import '../models/worker.dart';
 import '../services/worker_service.dart';
 import '../services/dosimetry_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/qr_image_decoder.dart';
 
 class ScannerScreen extends StatefulWidget {
   const ScannerScreen({super.key});
@@ -22,12 +24,17 @@ class _ScannerScreenState extends State<ScannerScreen> {
   // Mode: 'full_badge' or 'standalone_strip'
   String _scanMode = 'full_badge';
 
-  Uint8List? _imageBytes;
-  String _imageFileName = 'strip.jpg';
-  bool _isAnalyzing = false;
-
-  // Worker identification
+  // ── Step 1: Worker & QR Image State ──
   Worker? _identifiedWorker;
+  Uint8List? _qrImageBytes;
+  String? _qrImageFileName;
+  QrDecodeResult? _lastQrDecodeResult;
+  bool _isDecodingQr = false;
+
+  // ── Step 2: Sensor / DoseBand Strip Image State (STRICTLY ISOLATED) ──
+  Uint8List? _sensorImageBytes;
+  String _sensorImageFileName = 'strip.jpg';
+  bool _isAnalyzing = false;
 
   @override
   void initState() {
@@ -50,27 +57,23 @@ class _ScannerScreenState extends State<ScannerScreen> {
     }
   }
 
-  // ─── IMAGE PICKING ───────────────────────────────────────────────────────────
-  Future<void> _pickImage(ImageSource source) async {
+  // ─── STEP 2: SENSOR IMAGE PICKING ──────────────────────────────────────────
+  Future<void> _pickSensorImage(ImageSource source) async {
     try {
-      final picked = await _picker.pickImage(source: source, imageQuality: 95);
+      final picked = await _picker.pickImage(source: source, imageQuality: 100);
       if (picked != null) {
         final bytes = await picked.readAsBytes();
         setState(() {
-          _imageBytes = bytes;
-          _imageFileName = picked.name;
+          _sensorImageBytes = bytes;
+          _sensorImageFileName = picked.name;
         });
       }
     } catch (e) {
-      _showSnack('Failed to load image: $e', isError: true);
+      _showSnack('Failed to load sensor image: $e', isError: true);
     }
   }
 
-  // ─── QR / WORKER SELECTION ──────────────────────────────────────────────────
-  /// Shows the worker catalog bottom sheet to select a pre-registered worker.
-  /// This replaces camera-QR scan (since image_picker doesn't decode QR codes —
-  /// only a dedicated QR scanner plugin can do that). The worker is then locally
-  /// verified via verifyBadge(rawPayload: ...).
+  // ─── STEP 1: WORKER SELECTION FROM CATALOG ─────────────────────────────────
   void _showWorkerCatalog() {
     final workers = _workerService.workers;
     showModalBottomSheet(
@@ -151,17 +154,42 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
-  /// Also try verifying via image upload (backend QR decode)
+  // ─── STEP 1: QR IMAGE DECODING & VERIFICATION ──────────────────────────────
   Future<void> _verifyQrViaImage(ImageSource source) async {
     try {
-      final picked = await _picker.pickImage(source: source, imageQuality: 95);
+      // 1. Pick ORIGINAL image directly without quality loss
+      final picked = await _picker.pickImage(source: source, imageQuality: 100);
       if (picked == null) return;
 
-      final bytes = await picked.readAsBytes();
-      _showSnack('Attempting QR decode…');
-      final res = await _workerService.verifyBadge(imageBytes: bytes, fileName: picked.name);
-      _handleQrVerificationResponse(res);
+      setState(() {
+        _isDecodingQr = true;
+      });
+      _showSnack('Scanning image for DoseBand QR code…');
+
+      final file = File(picked.path);
+      final rawFileBytes = await file.readAsBytes();
+
+      // 2. Multi-stage QR Decoder directly on the original file
+      final decodeResult = await decodeQrFromImage(file);
+
+      setState(() {
+        _qrImageBytes = rawFileBytes;
+        _qrImageFileName = picked.name;
+        _lastQrDecodeResult = decodeResult;
+        _isDecodingQr = false;
+      });
+
+      // 3. If rawValue is found -> perform worker validation
+      if (decodeResult.detected && decodeResult.rawValue != null && decodeResult.rawValue!.trim().isNotEmpty) {
+        final res = await _workerService.verifyBadge(rawPayload: decodeResult.rawValue);
+        _handleQrVerificationResponse(res);
+      } else {
+        // No QR detected in the image
+        setState(() => _identifiedWorker = null);
+        _showSnack('No QR code detected in this image.', isError: true);
+      }
     } catch (e) {
+      setState(() => _isDecodingQr = false);
       _showSnack('QR verification error: $e', isError: true);
     }
   }
@@ -176,13 +204,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
       _showSnack('✅ Verified: ${w.name} (${w.workerId})');
     } else {
       setState(() => _identifiedWorker = null);
-      _showSnack(res['message'] ?? 'Not a valid DoseBand badge.', isError: true);
+      _showSnack(res['message'] ?? 'This is not a valid DoseBand QR.', isError: true);
     }
   }
 
-  // ─── ANALYSIS ───────────────────────────────────────────────────────────────
+  // ─── STEP 2: OPTICAL DOSIMETRY ANALYSIS ─────────────────────────────────────
   Future<void> _analyzeStrip() async {
-    if (_imageBytes == null) return;
+    if (_sensorImageBytes == null) return;
     if (_scanMode == 'full_badge' && _identifiedWorker == null) {
       _showSnack('Please link a worker badge first (Full DoseBand mode).', isError: true);
       return;
@@ -192,8 +220,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     try {
       final result = await _dosimetryService.processImage(
-        imageBytes: _imageBytes!,
-        fileName: _imageFileName,
+        imageBytes: _sensorImageBytes!,
+        fileName: _sensorImageFileName,
         workerId: _identifiedWorker?.workerId ?? 'W-DEMO',
         temperatureC: 25.0,
         humidityRh: null,
@@ -483,9 +511,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isStandalone = _scanMode == 'standalone_strip';
-    final bool hasImage = _imageBytes != null;
+    final bool hasSensorImage = _sensorImageBytes != null;
     final bool hasWorker = _identifiedWorker != null;
-    final bool canAnalyze = hasImage && (isStandalone || hasWorker) && !_isAnalyzing;
+    final bool canAnalyze = hasSensorImage && (isStandalone || hasWorker) && !_isAnalyzing;
 
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
@@ -559,6 +587,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 title: isStandalone ? 'Link Worker (Optional)' : 'Link Worker Badge (Required)',
                 isComplete: hasWorker,
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (isStandalone && !hasWorker)
                       const _InfoBanner(
@@ -567,12 +596,37 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         message: 'Standalone mode: you can analyze without linking a worker.',
                       ),
 
-                    if (hasWorker)
+                    if (_isDecodingQr) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.safetyOrange)),
+                            SizedBox(width: 12),
+                            Text('Decoding original QR image (ML Kit / ZXing)…', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    if (hasWorker) ...[
                       _WorkerLinkedCard(
                         worker: _identifiedWorker!,
-                        onClear: () => setState(() => _identifiedWorker = null),
-                      )
-                    else ...[
+                        onClear: () => setState(() {
+                          _identifiedWorker = null;
+                          _qrImageBytes = null;
+                          _qrImageFileName = null;
+                          _lastQrDecodeResult = null;
+                        }),
+                      ),
+                    ] else ...[
                       const SizedBox(height: 8),
                       // Primary: catalog select
                       SizedBox(
@@ -604,16 +658,75 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         )),
                       ]),
                     ],
+
+                    // Developer QR Diagnostic Panel (Requirement 13)
+                    if (_lastQrDecodeResult != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFF334155)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              const Icon(Icons.bug_report_rounded, color: AppTheme.safetyOrange, size: 14),
+                              const SizedBox(width: 6),
+                              const Text('QR DECODER DIAGNOSTICS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF94A3B8), letterSpacing: 0.5)),
+                              const Spacer(),
+                              Text(
+                                _lastQrDecodeResult!.detected ? 'DETECTED' : 'NO QR',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w900,
+                                  color: _lastQrDecodeResult!.detected ? AppTheme.safeGreen : AppTheme.unsafeRed,
+                                ),
+                              ),
+                            ]),
+                            const SizedBox(height: 6),
+                            if (_qrImageBytes != null) ...[
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Image.memory(_qrImageBytes!, width: 44, height: 44, fit: BoxFit.cover),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Selected: ${_qrImageFileName ?? "image"} (${_lastQrDecodeResult!.width ?? "?"}x${_lastQrDecodeResult!.height ?? "?"} px, ${_lastQrDecodeResult!.imageSizeBytes ?? 0} B)', style: const TextStyle(fontSize: 10, color: Colors.white70)),
+                                        Text('Decoder: ${_lastQrDecodeResult!.decoderUsed}', style: const TextStyle(fontSize: 10, color: Color(0xFF38BDF8), fontWeight: FontWeight.w700)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ] else ...[
+                              Text('Selected: ${_qrImageFileName ?? "image"} (${_lastQrDecodeResult!.width ?? "?"}x${_lastQrDecodeResult!.height ?? "?"} px, ${_lastQrDecodeResult!.imageSizeBytes ?? 0} B)', style: const TextStyle(fontSize: 10, color: Colors.white70)),
+                              Text('Decoder: ${_lastQrDecodeResult!.decoderUsed}', style: const TextStyle(fontSize: 10, color: Color(0xFF38BDF8), fontWeight: FontWeight.w700)),
+                            ],
+                            const SizedBox(height: 4),
+                            Text('Raw value: ${_lastQrDecodeResult!.rawValue ?? "null"}', style: const TextStyle(fontSize: 9.5, color: Color(0xFFCBD5E1), fontStyle: FontStyle.italic), maxLines: 2, overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
               const SizedBox(height: 12),
 
-              // ── Step 2: Capture Photo ──
+              // ── Step 2: Capture Photo (STRICTLY FOR SENSOR / DOSEBAND PHOTO) ──
               _StepCard(
                 stepNum: '2',
                 title: isStandalone ? 'Capture H₂S Strip Photo' : 'Capture Full DoseBand Photo',
-                isComplete: hasImage,
+                isComplete: hasSensorImage,
                 child: Column(
                   children: [
                     if (!isStandalone) ...[
@@ -624,7 +737,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       ),
                     ] else ...[
                       // Framing guide
-                      if (!hasImage) ...[
+                      if (!hasSensorImage) ...[
                         const SizedBox(height: 10),
                         Container(
                           width: double.infinity,
@@ -657,20 +770,20 @@ class _ScannerScreenState extends State<ScannerScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
-                        onPressed: () => _pickImage(ImageSource.camera),
+                        onPressed: () => _pickSensorImage(ImageSource.camera),
                       )),
                       const SizedBox(width: 8),
                       Expanded(child: _OutlineBtn(
                         label: 'Upload Photo',
                         icon: Icons.file_upload_outlined,
-                        onTap: () => _pickImage(ImageSource.gallery),
+                        onTap: () => _pickSensorImage(ImageSource.gallery),
                       )),
                     ]),
-                    if (hasImage) ...[
+                    if (hasSensorImage) ...[
                       const SizedBox(height: 12),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
-                        child: Image.memory(_imageBytes!, height: 160, width: double.infinity, fit: BoxFit.contain),
+                        child: Image.memory(_sensorImageBytes!, height: 160, width: double.infinity, fit: BoxFit.contain),
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -679,7 +792,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                           TextButton.icon(
                             icon: const Icon(Icons.refresh_rounded, size: 14, color: AppTheme.textMuted),
                             label: const Text('Change Photo', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-                            onPressed: () => _pickImage(ImageSource.gallery),
+                            onPressed: () => _pickSensorImage(ImageSource.gallery),
                           ),
                         ],
                       ),
@@ -725,7 +838,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 const SizedBox(height: 8),
                 Center(
                   child: Text(
-                    !hasImage
+                    !hasSensorImage
                         ? 'Capture or upload a photo to enable analysis'
                         : (!isStandalone && !hasWorker)
                             ? 'Link a worker badge to enable analysis in Full DoseBand mode'

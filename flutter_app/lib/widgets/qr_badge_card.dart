@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../models/worker.dart';
 import '../theme/app_theme.dart';
-import '../utils/qr_generator.dart';
 
 /// Official DoseBand Smart Badge Card Widget.
 /// Renders an authentic industrial ID badge with crisp, scannable QR matrix.
@@ -29,7 +29,6 @@ class QrBadgeCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final matrix = QrCodeGenerator.generateMatrix(payload);
     final isExpired = worker.isBadgeExpired;
     final isActive = worker.status == 'Active' && !isExpired;
 
@@ -173,7 +172,7 @@ class QrBadgeCardWidget extends StatelessWidget {
                   child: Column(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(10),
@@ -187,11 +186,19 @@ class QrBadgeCardWidget extends StatelessWidget {
                         ),
                         child: AspectRatio(
                           aspectRatio: 1,
-                          child: CustomPaint(
-                            painter: QrCodePainter(
-                              matrix: matrix,
-                              color: const Color(0xFF0F172A),
-                              backgroundColor: Colors.white,
+                          child: QrImageView(
+                            data: payload,
+                            version: QrVersions.auto,
+                            errorCorrectionLevel: QrErrorCorrectLevel.M,
+                            backgroundColor: Colors.white,
+                            padding: const EdgeInsets.all(4),
+                            dataModuleStyle: const QrDataModuleStyle(
+                              dataModuleShape: QrDataModuleShape.square,
+                              color: Color(0xFF0F172A),
+                            ),
+                            eyeStyle: const QrEyeStyle(
+                              eyeShape: QrEyeShape.square,
+                              color: Color(0xFF0F172A),
                             ),
                           ),
                         ),
