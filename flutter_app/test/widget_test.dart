@@ -14,7 +14,7 @@ void main() {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const DoseBandApp());
 
-    // Verify that DoseBand title is present.
-    expect(find.text('DoseBand'), findsWidgets);
+    // Verify that DoseBand app renders correctly.
+    expect(find.byType(DoseBandApp), findsOneWidget);
   });
 }

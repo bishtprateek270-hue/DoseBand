@@ -121,10 +121,15 @@ def detect_all_rois(
             min_y + int(bh * 0.40)
         )
 
+        proto_version = extracted_data.get("prototype_version", "PROTOTYPE_V2")
+        is_strip_present = extracted_data.get("is_strip_present", True)
+
         return {
-            "is_valid": True,
+            "is_valid": is_strip_present,
             "badge_mode": "FULL_3D_DOSEBAND_ENCLOSURE",
-            "overall_confidence": 0.95,
+            "prototype_version": proto_version,
+            "is_strip_present": is_strip_present,
+            "overall_confidence": 0.96 if is_strip_present else 0.0,
             "quad_points": quad_pts.tolist(),
             "canonical_view": warped_canonical,
             "extracted_features": extracted_data,
@@ -135,7 +140,7 @@ def detect_all_rois(
             },
             "h2s_strip": {
                 "box": h2s_box_orig,
-                "confidence": 0.95
+                "confidence": 0.96 if is_strip_present else 0.0
             },
             "humidity_indicator": {
                 "box": hum_box_orig,

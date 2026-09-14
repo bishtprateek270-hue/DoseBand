@@ -983,10 +983,13 @@ elif page == "Scan Strip":
                     st.info(f"✅ **Badge Expiry Status:** {expiry_status_msg}")
 
                 # Extracted Sensor ROIs, Canonical View & Developer Debug Overlay
-                with st.expander("🔬 View Extracted Sensor ROIs, 3D Prototype Geometry & Debug Overlay", expanded=False):
-                    if inf_res.get("debug_overlay") is not None and isinstance(inf_res["debug_overlay"], np.ndarray):
-                        st.markdown("#### 🛠️ Developer Perspective Rectification & Alignment Overlay")
-                        st.image(cv2.cvtColor(inf_res["debug_overlay"], cv2.COLOR_BGR2RGB), caption="Perspective Rectification & Multi-Zone Alignment Overlay", use_container_width=True)
+                show_h2s_debug = st.checkbox("🔍 Show H2S Detection Debug (Enclosure, Window, Safe ROI, Strip Mask & Final Pixels)", value=True)
+                if show_h2s_debug:
+                    with st.expander("🔬 H2S Detection Debug — Multi-Zone Alignment, Safe ROI & Strip-Only Mask", expanded=True):
+                        proto_ver_label = inf_res.get("prototype_version", "PROTOTYPE_V2")
+                        st.markdown(f"#### 🛠️ DoseBand Enclosure & Perspective Diagnostic [{proto_ver_label}]")
+                        if inf_res.get("debug_overlay") is not None and isinstance(inf_res["debug_overlay"], np.ndarray):
+                            st.image(cv2.cvtColor(inf_res["debug_overlay"], cv2.COLOR_BGR2RGB), caption=f"Developer Multi-Panel Debug View — Blue: Enclosure | Yellow: H2S Window | Green: Inner Safe ROI | Right: Final Strip Pixels", use_container_width=True)
                         st.divider()
 
                     roi_v_col1, roi_v_col2 = st.columns(2)

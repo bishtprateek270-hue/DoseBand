@@ -476,9 +476,10 @@ async def analyze_sensor_strip(
         return to_serializable({
             "is_valid": inf_res.get("is_valid", True),
             "status": "Valid",
+            "prototype_version": inf_res.get("prototype_version", "PROTOTYPE_V2"),
             "validation_score": strip_val_score,
             "confidence_pct": inf_res.get("confidence_pct", strip_confidence_pct),
-            "user_message": "Test strip optical verification passed with high confidence.",
+            "user_message": inf_res.get("user_message", user_message),
             "estimated_h2s_ppm": inf_res.get("estimated_h2s_ppm", 0.0),
             "cumulative_dose_ppm_h": inf_res.get("cumulative_dose_ppm_h", 0.0),
             "predicted_humidity": inf_res.get("predicted_humidity", 50.0),

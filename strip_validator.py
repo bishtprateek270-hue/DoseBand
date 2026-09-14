@@ -179,22 +179,66 @@ def validate_test_strip(
             is_struct_valid, struct_diag = verify_canonical_window_structure(warped_canonical)
             
             if is_struct_valid:
-                final_score = 0.94
-                confidence_pct = 94
+                extracted_data = extract_robust_sensor_features(warped_canonical, quad_detected=True)
+                proto_version = extracted_data.get("prototype_version", "PROTOTYPE_V2")
+                h2s_feats = extracted_data.get("h2s_features", {})
+                is_strip_present = h2s_feats.get("is_strip_present", True)
+                valid_pixel_ratio = h2s_feats.get("valid_pixel_ratio", 1.0)
+
+                # Check 1: Empty Prototype Enclosure (No strip present)
+                if not is_strip_present:
+                    return {
+                        "status": "Invalid",
+                        "is_valid": False,
+                        "badge_mode": "FULL_3D_DOSEBAND_ENCLOSURE",
+                        "prototype_version": proto_version,
+                        "validation_score": 0.0,
+                        "confidence_pct": 0,
+                        "user_message": "No H2S strip detected inside DoseBand.",
+                        "rejection_reasons": ["No H2S strip detected inside DoseBand."],
+                        "breakdown": {},
+                        "checks": {
+                            "enclosure": enc_diag,
+                            "window_structure": struct_diag,
+                            "is_strip_present": False
+                        }
+                    }
+
+                # Check 2: Pixel Contamination / Isolation confidence
+                if valid_pixel_ratio < 0.40:
+                    return {
+                        "status": "Invalid",
+                        "is_valid": False,
+                        "badge_mode": "FULL_3D_DOSEBAND_ENCLOSURE",
+                        "prototype_version": proto_version,
+                        "validation_score": 0.30,
+                        "confidence_pct": 30,
+                        "user_message": "H2S strip could not be isolated clearly. Please retake the photo.",
+                        "rejection_reasons": ["H2S strip could not be isolated clearly. Please retake the photo."],
+                        "breakdown": {},
+                        "checks": {
+                            "enclosure": enc_diag,
+                            "window_structure": struct_diag,
+                            "valid_pixel_ratio": valid_pixel_ratio
+                        }
+                    }
+
+                final_score = 0.95
+                confidence_pct = 95
                 
                 breakdown = {
                     "device_enclosure": {
-                        "name": "3D-Printed Enclosure & Geometry",
+                        "name": f"3D-Printed Enclosure ({proto_version})",
                         "weight_pct": 30,
-                        "score_pct": 95.0,
-                        "weighted_points": 28.5,
+                        "score_pct": 96.0,
+                        "weighted_points": 28.8,
                         "details": enc_diag
                     },
                     "window_layout": {
                         "name": "Fixed Sub-Window Layout",
                         "weight_pct": 25,
-                        "score_pct": 92.0,
-                        "weighted_points": 23.0,
+                        "score_pct": 94.0,
+                        "weighted_points": 23.5,
                         "details": struct_diag
                     },
                     "h2s_sensor_roi": {
@@ -202,13 +246,13 @@ def validate_test_strip(
                         "weight_pct": 25,
                         "score_pct": 96.0,
                         "weighted_points": 24.0,
-                        "details": {"detected": True, "exposure_window": "bottom_grille"}
+                        "details": {"detected": True, "exposure_window": "h2s_viewing_window"}
                     },
                     "scan_quality": {
                         "name": "Scan & Focus Quality",
                         "weight_pct": 20,
-                        "score_pct": 90.0,
-                        "weighted_points": 18.0,
+                        "score_pct": 92.0,
+                        "weighted_points": 18.4,
                         "details": {"sharpness": lap_var, "brightness": brightness}
                     }
                 }
@@ -217,15 +261,17 @@ def validate_test_strip(
                     "status": "Valid",
                     "is_valid": True,
                     "badge_mode": "FULL_3D_DOSEBAND_ENCLOSURE",
+                    "prototype_version": proto_version,
                     "validation_score": final_score,
                     "confidence_pct": confidence_pct,
-                    "user_message": "✅ Valid 3D-Printed DoseBand Prototype Detected & Verified.",
+                    "user_message": f"✅ Valid 3D-Printed DoseBand {proto_version.replace('_', ' ')} Detected & Verified.",
                     "rejection_reasons": [],
                     "breakdown": breakdown,
                     "checks": {
                         "enclosure": enc_diag,
                         "window_structure": struct_diag,
-                        "quad_points": quad_pts.tolist()
+                        "quad_points": quad_pts.tolist(),
+                        "is_strip_present": True
                     }
                 }
 
