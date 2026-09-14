@@ -11,17 +11,12 @@ class WorkerDirectoryScreen extends StatefulWidget {
   State<WorkerDirectoryScreen> createState() => _WorkerDirectoryScreenState();
 }
 
-class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with SingleTickerProviderStateMixin {
+class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> {
   final WorkerService _workerService = WorkerService();
-  late TabController _tabController;
 
-  // Search & Filters for Tab 1
   String _searchQuery = '';
-  String _selectedDept = 'All Departments';
-  String _selectedZone = 'All Work Zones';
-  String _selectedStatus = 'All Statuses';
 
-  // State for Tab 2: Register Worker
+  // Register form
   final _regFormKey = GlobalKey<FormState>();
   final _regIdController = TextEditingController();
   final _regNameController = TextEditingController();
@@ -34,7 +29,7 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
   DateTime _regExpiryDate = DateTime.now().add(const Duration(days: 60));
   bool _isRegistering = false;
 
-  // State for Tab 3: Edit Worker
+  // Edit form
   Worker? _editSelectedWorker;
   final _editFormKey = GlobalKey<FormState>();
   final _editNameController = TextEditingController();
@@ -47,7 +42,7 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
   DateTime _editExpiryDate = DateTime.now().add(const Duration(days: 60));
   bool _isEditing = false;
 
-  // State for Tab 4: Delete Worker
+  // Delete
   Worker? _delSelectedWorker;
   bool _confirmDelete = false;
   bool _isDeleting = false;
@@ -85,14 +80,12 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
     _workerService.addListener(_onServiceUpdate);
     _workerService.fetchWorkers();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _workerService.removeListener(_onServiceUpdate);
     _regIdController.dispose();
     _regNameController.dispose();
@@ -111,901 +104,829 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> with Sing
   }
 
   void _populateEditForm(Worker w) {
-    setState(() {
-      _editSelectedWorker = w;
-      _editNameController.text = w.name;
-      _editBadgeController.text = w.effectiveBadgeId;
-      _editDept = _deptOptions.contains(w.department) ? w.department : _deptOptions.first;
-      _editZone = _zoneOptions.contains(w.workZone) ? w.workZone : _zoneOptions.first;
-      _editShift = _shiftOptions.contains(w.shift) ? w.shift : _shiftOptions.first;
-      _editStatus = _statusOptions.contains(w.status) ? w.status : _statusOptions.first;
-
-      try {
-        _editIssueDate = DateTime.parse(w.badgeIssueDate);
-      } catch (_) {
-        _editIssueDate = DateTime.now();
-      }
-
-      try {
-        _editExpiryDate = DateTime.parse(w.badgeExpiryDate);
-      } catch (_) {
-        _editExpiryDate = DateTime.now().add(const Duration(days: 60));
-      }
-    });
+    _editSelectedWorker = w;
+    _editNameController.text = w.name;
+    _editBadgeController.text = w.effectiveBadgeId;
+    _editDept = _deptOptions.contains(w.department) ? w.department : _deptOptions.first;
+    _editZone = _zoneOptions.contains(w.workZone) ? w.workZone : _zoneOptions.first;
+    _editShift = _shiftOptions.contains(w.shift) ? w.shift : _shiftOptions.first;
+    _editStatus = _statusOptions.contains(w.status) ? w.status : _statusOptions.first;
+    try { _editIssueDate = DateTime.parse(w.badgeIssueDate); } catch (_) { _editIssueDate = DateTime.now(); }
+    try { _editExpiryDate = DateTime.parse(w.badgeExpiryDate); } catch (_) { _editExpiryDate = DateTime.now().add(const Duration(days: 60)); }
   }
 
   @override
   Widget build(BuildContext context) {
     final workers = _workerService.workers;
-    final totalWorkers = workers.length;
     final activeWorkers = workers.where((w) => w.status == 'Active').length;
     final expiredCount = _workerService.unsafeWorkersCount;
-    final totalZones = workers.map((w) => w.workZone).toSet().length;
+
+    final filtered = workers.where((w) {
+      if (_searchQuery.isEmpty) return true;
+      final q = _searchQuery.toLowerCase();
+      return w.name.toLowerCase().contains(q) ||
+          w.workerId.toLowerCase().contains(q) ||
+          w.effectiveBadgeId.toLowerCase().contains(q);
+    }).toList();
 
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppTheme.safetyOrangeBg,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: AppTheme.safetyOrange.withValues(alpha: 0.4)),
-                      ),
-                      child: const Text(
-                        'PERSONNEL & DOSIMETRY LOGISTICS',
-                        style: TextStyle(color: AppTheme.safetyOrange, fontSize: 10, fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Worker & Badge Management',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
-                    ),
-                    const Text(
-                      'Safety Officer Console — Register, track, update, and manage plant personnel and dosimeter badges.',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                    ),
-                    const SizedBox(height: 12),
-                    GridView.count(
-                      crossAxisCount: 2,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                      childAspectRatio: 2.2,
-                      children: [
-                        _buildMetricTile('Total Workers', '$totalWorkers', Icons.people_outline, const Color(0xFF0F172A)),
-                        _buildMetricTile('Active Personnel', '$activeWorkers', Icons.check_circle_outline, AppTheme.safeGreen),
-                        _buildMetricTile('Expired / Expiring', '$expiredCount', Icons.warning_amber_rounded, AppTheme.unsafeRed),
-                        _buildMetricTile('Monitored Zones', '$totalZones', Icons.location_on_outlined, const Color(0xFF0284C7)),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                ),
-              ),
-            ),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _TabBarHeaderDelegate(
-                TabBar(
-                  controller: _tabController,
-                  isScrollable: true,
-                  labelColor: AppTheme.safetyOrange,
-                  unselectedLabelColor: AppTheme.textMuted,
-                  indicatorColor: AppTheme.safetyOrange,
-                  indicatorWeight: 3,
-                  labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  tabs: const [
-                    Tab(icon: Icon(Icons.list_alt_rounded, size: 18), text: 'Directory'),
-                    Tab(icon: Icon(Icons.person_add_alt_1_rounded, size: 18), text: 'Register'),
-                    Tab(icon: Icon(Icons.edit_outlined, size: 18), text: 'Edit'),
-                    Tab(icon: Icon(Icons.delete_outline_rounded, size: 18), text: 'Delete'),
-                  ],
-                ),
-              ),
-            ),
-          ];
-        },
-        body: TabBarView(
-          controller: _tabController,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildDirectoryTab(workers),
-            _buildRegisterTab(),
-            _buildEditTab(workers),
-            _buildDeleteTab(workers),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- TAB 1: WORKER DIRECTORY ---
-  Widget _buildDirectoryTab(List<Worker> workers) {
-    final filtered = workers.where((w) {
-      final matchesSearch = _searchQuery.isEmpty ||
-          w.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          w.workerId.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          w.effectiveBadgeId.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesDept = _selectedDept == 'All Departments' || w.department == _selectedDept;
-      final matchesZone = _selectedZone == 'All Work Zones' || w.workZone == _selectedZone;
-      final matchesStatus = _selectedStatus == 'All Statuses' || w.status == _selectedStatus;
-      return matchesSearch && matchesDept && matchesZone && matchesStatus;
-    }).toList();
-
-    return RefreshIndicator(
-      onRefresh: () => _workerService.fetchWorkers(),
-      color: AppTheme.safetyOrange,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextField(
-            decoration: InputDecoration(
-              hintText: 'Search by Name, Worker ID, or Badge ID...',
-              prefixIcon: const Icon(Icons.search, color: AppTheme.textMuted),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () => setState(() => _searchQuery = ''))
-                  : null,
-            ),
-            onChanged: (val) => setState(() => _searchQuery = val),
-          ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildFilterChip('Dept: $_selectedDept', () => _showDeptFilterDialog()),
-                const SizedBox(width: 8),
-                _buildFilterChip('Zone: $_selectedZone', () => _showZoneFilterDialog()),
-                const SizedBox(width: 8),
-                _buildFilterChip('Status: $_selectedStatus', () => _showStatusFilterDialog()),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Showing ${filtered.length} of ${workers.length} registered personnel',
-            style: const TextStyle(fontSize: 12, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          if (filtered.isEmpty)
+            // ── HEADER ──
             Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.borderColor),
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Worker Directory',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppTheme.textPrimary, letterSpacing: -0.5),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${workers.length} personnel · $activeWorkers active · $expiredCount need attention',
+                    style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                  ),
+                  const SizedBox(height: 12),
+                  // Search bar
+                  Container(
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppTheme.scaffoldBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: TextField(
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'Search name, ID or badge…',
+                        hintStyle: const TextStyle(color: AppTheme.textFaint, fontSize: 13),
+                        prefixIcon: const Icon(Icons.search, color: AppTheme.textMuted, size: 18),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16, color: AppTheme.textMuted),
+                                onPressed: () => setState(() => _searchQuery = ''),
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              child: const Center(
-                child: Text('No personnel matching the active filter criteria.', style: TextStyle(color: AppTheme.textMuted)),
+            ),
+            const Divider(height: 1, color: AppTheme.borderColor),
+
+            // ── ACTION BUTTONS (Register / Edit / Delete) ──
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  _ActionButton(
+                    label: 'Register',
+                    icon: Icons.person_add_alt_1_rounded,
+                    color: AppTheme.safetyOrange,
+                    onTap: () => _showRegisterSheet(context),
+                  ),
+                  const SizedBox(width: 8),
+                  _ActionButton(
+                    label: 'Edit',
+                    icon: Icons.edit_outlined,
+                    color: const Color(0xFF0284C7),
+                    onTap: workers.isEmpty ? null : () => _showEditSheet(context, workers),
+                  ),
+                  const SizedBox(width: 8),
+                  _ActionButton(
+                    label: 'Delete',
+                    icon: Icons.delete_outline_rounded,
+                    color: AppTheme.unsafeRed,
+                    onTap: workers.isEmpty ? null : () => _showDeleteSheet(context, workers),
+                  ),
+                ],
               ),
-            )
-          else
-            ...filtered.map((w) => _buildWorkerCard(w)),
-          const SizedBox(height: 40),
-        ],
-      ),
-    );
-  }
+            ),
+            const Divider(height: 1, color: AppTheme.borderColor),
 
-  Widget _buildWorkerCard(Worker w) {
-    Color riskColor = AppTheme.safeGreen;
-    Color riskBg = AppTheme.safeGreenBg;
-    if (w.isBadgeExpired || w.status != 'Active' || w.cumulativeDose >= 50.0) {
-      riskColor = AppTheme.unsafeRed;
-      riskBg = AppTheme.unsafeRedBg;
-    } else if (w.cumulativeDose >= 10.0) {
-      riskColor = AppTheme.cautionYellow;
-      riskBg = AppTheme.cautionYellowBg;
-    }
-
-    final double progress = (w.cumulativeDose / 50.0).clamp(0.0, 1.0);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.borderColor),
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => WorkerDetailScreen(worker: w)),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(14.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Row(
+            // ── WORKER LIST ──
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => _workerService.fetchWorkers(),
+                color: AppTheme.safetyOrange,
+                child: filtered.isEmpty
+                    ? ListView(
                         children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              gradient: AppTheme.navyHeroGradient,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: Text(
-                                w.workerId.replaceAll('W-', ''),
-                                style: const TextStyle(color: Color(0xFFFB923C), fontWeight: FontWeight.w900, fontSize: 12),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
+                          const SizedBox(height: 60),
+                          Center(
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(w.name, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
-                                const SizedBox(height: 2),
-                                Text('${w.workerId} • ${w.department}', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                                Icon(Icons.people_outline, size: 48, color: AppTheme.textFaint),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _searchQuery.isEmpty ? 'No workers registered yet.' : 'No results found.',
+                                  style: const TextStyle(color: AppTheme.textMuted, fontSize: 14),
+                                ),
                               ],
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                      decoration: BoxDecoration(
-                        color: riskBg,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: riskColor.withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        w.isBadgeExpired ? 'EXPIRED' : (w.status != 'Active' ? w.status.toUpperCase() : 'ACTIVE'),
-                        style: TextStyle(color: riskColor, fontSize: 9.5, fontWeight: FontWeight.w900, letterSpacing: 0.4),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Cumulative Dose Progress Bar
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Cumulative Dose: ${w.cumulativeDose.toStringAsFixed(2)} ppm•h',
-                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: riskColor),
-                    ),
-                    Text(
-                      '${(50.0 - w.cumulativeDose).clamp(0.0, 50.0).toStringAsFixed(1)} ppm•h headroom',
-                      style: const TextStyle(fontSize: 10, color: AppTheme.textFaint),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    valueColor: AlwaysStoppedAnimation<Color>(riskColor),
-                    minHeight: 5,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.location_on_outlined, size: 13, color: AppTheme.textMuted),
-                          const SizedBox(width: 3),
-                          Flexible(
-                            child: Text(
-                              w.workZone.split(" - ").first,
-                              style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, i) => _WorkerTile(
+                          worker: filtered[i],
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => WorkerDetailScreen(worker: filtered[i])),
                           ),
-                        ],
+                        ),
                       ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // REGISTER BOTTOM SHEET
+  // ─────────────────────────────────────────────
+  void _showRegisterSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _buildSheet(
+        title: 'Register New Worker',
+        icon: Icons.person_add_alt_1_rounded,
+        iconColor: AppTheme.safetyOrange,
+        child: StatefulBuilder(builder: (ctx, setSheet) {
+          return Form(
+            key: _regFormKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SheetField(controller: _regIdController, label: 'Worker ID*', hint: 'e.g. W-106'),
+                _SheetField(controller: _regNameController, label: 'Full Name*', hint: 'e.g. Kavita Sharma'),
+                _SheetDropdown(
+                  label: 'Department*', value: _regDept, items: _deptOptions,
+                  onChanged: (v) => setSheet(() => _regDept = v!),
+                ),
+                _SheetDropdown(
+                  label: 'Work Zone*', value: _regZone, items: _zoneOptions,
+                  onChanged: (v) => setSheet(() => _regZone = v!),
+                ),
+                _SheetDropdown(
+                  label: 'Shift*', value: _regShift, items: _shiftOptions,
+                  onChanged: (v) => setSheet(() => _regShift = v!),
+                ),
+                _SheetDropdown(
+                  label: 'Status*', value: _regStatus, items: _statusOptions,
+                  onChanged: (v) => setSheet(() => _regStatus = v!),
+                ),
+                _SheetField(controller: _regBadgeController, label: 'Badge ID*', hint: 'e.g. BDG-106'),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: _DateTile(
+                    label: 'Issue Date',
+                    date: _regIssueDate,
+                    onTap: () async {
+                      final d = await _pickDate(ctx, _regIssueDate);
+                      if (d != null) setSheet(() => _regIssueDate = d);
+                    },
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: _DateTile(
+                    label: 'Expiry Date',
+                    date: _regExpiryDate,
+                    onTap: () async {
+                      final d = await _pickDate(ctx, _regExpiryDate);
+                      if (d != null) setSheet(() => _regExpiryDate = d);
+                    },
+                  )),
+                ]),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.safetyOrange,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    const SizedBox(width: 8),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.qr_code_2_rounded, size: 13, color: Color(0xFF0284C7)),
-                        const SizedBox(width: 3),
-                        Text('Badge: ${w.effectiveBadgeId}', style: const TextStyle(fontSize: 11, color: Color(0xFF0284C7), fontWeight: FontWeight.w800)),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.chevron_right_rounded, size: 16, color: AppTheme.textMuted),
-                      ],
-                    ),
-                  ],
+                    onPressed: _isRegistering ? null : () async {
+                      if (!_regFormKey.currentState!.validate()) return;
+                      setSheet(() => _isRegistering = true);
+                      final newWorker = Worker(
+                        workerId: _regIdController.text.trim(),
+                        name: _regNameController.text.trim(),
+                        department: _regDept,
+                        workZone: _regZone,
+                        shift: _regShift,
+                        badgeId: _regBadgeController.text.trim(),
+                        badgeIssueDate: _regIssueDate.toIso8601String().substring(0, 10),
+                        badgeExpiryDate: _regExpiryDate.toIso8601String().substring(0, 10),
+                        status: _regStatus,
+                      );
+                      final ok = await _workerService.addWorker(newWorker);
+                      setSheet(() => _isRegistering = false);
+                      if (mounted) {
+                        Navigator.pop(context);
+                        _regIdController.clear();
+                        _regNameController.clear();
+                        _regBadgeController.clear();
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(ok ? '✅ ${newWorker.name} registered!' : '❌ Failed. Check duplicate IDs.'),
+                          backgroundColor: ok ? AppTheme.safeGreen : AppTheme.unsafeRed,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ));
+                      }
+                    },
+                    child: _isRegistering
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('Register & Issue Badge', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
                 ),
               ],
             ),
-          ),
-        ),
+          );
+        }),
       ),
     );
   }
 
-  // --- TAB 2: REGISTER WORKER ---
-  Widget _buildRegisterTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Form(
-        key: _regFormKey,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.borderColor),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('➕ Register New Plant Personnel', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-              const Text('All fields are mandatory. Worker ID and Badge ID must be globally unique.', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _regIdController,
-                decoration: const InputDecoration(labelText: 'Worker ID*', hintText: 'e.g. W-106'),
-                validator: (val) => (val == null || val.trim().isEmpty) ? 'Worker ID is required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _regNameController,
-                decoration: const InputDecoration(labelText: 'Full Name*', hintText: 'e.g. Kavita Sharma'),
-                validator: (val) => (val == null || val.trim().isEmpty) ? 'Full Name is required' : null,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _regDept,
-                decoration: const InputDecoration(labelText: 'Department*'),
-                items: _deptOptions.map((d) => DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 13)))).toList(),
-                onChanged: (v) => setState(() => _regDept = v!),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _regZone,
-                decoration: const InputDecoration(labelText: 'Work Zone / Unit*'),
-                items: _zoneOptions.map((z) => DropdownMenuItem(value: z, child: Text(z, style: const TextStyle(fontSize: 12)))).toList(),
-                onChanged: (v) => setState(() => _regZone = v!),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _regShift,
-                decoration: const InputDecoration(labelText: 'Shift Assignment*'),
-                items: _shiftOptions.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
-                onChanged: (v) => setState(() => _regShift = v!),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _regStatus,
-                decoration: const InputDecoration(labelText: 'Worker Status*'),
-                items: _statusOptions.map((st) => DropdownMenuItem(value: st, child: Text(st, style: const TextStyle(fontSize: 13)))).toList(),
-                onChanged: (v) => setState(() => _regStatus = v!),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _regBadgeController,
-                decoration: const InputDecoration(labelText: 'Dosimeter Badge ID*', hintText: 'e.g. BDG-106'),
-                validator: (val) => (val == null || val.trim().isEmpty) ? 'Badge ID is required' : null,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.calendar_today_rounded, size: 16),
-                      label: Text('Issue: ${_regIssueDate.toIso8601String().substring(0, 10)}', style: const TextStyle(fontSize: 11)),
-                      onPressed: () async {
-                        final d = await showDatePicker(
-                          context: context,
-                          initialDate: _regIssueDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2030),
-                        );
-                        if (d != null) setState(() => _regIssueDate = d);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.event_busy_rounded, size: 16),
-                      label: Text('Expiry: ${_regExpiryDate.toIso8601String().substring(0, 10)}', style: const TextStyle(fontSize: 11)),
-                      onPressed: () async {
-                        final d = await showDatePicker(
-                          context: context,
-                          initialDate: _regExpiryDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2030),
-                        );
-                        if (d != null) setState(() => _regExpiryDate = d);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: _isRegistering
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Icon(Icons.shield_rounded),
-                  label: const Text('Register Worker & Issue Badge'),
-                  onPressed: _isRegistering ? null : _handleRegister,
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.safetyOrange),
+  // ─────────────────────────────────────────────
+  // EDIT BOTTOM SHEET
+  // ─────────────────────────────────────────────
+  void _showEditSheet(BuildContext context, List<Worker> workers) {
+    if (_editSelectedWorker == null) _populateEditForm(workers.first);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _buildSheet(
+        title: 'Edit Worker Profile',
+        icon: Icons.edit_outlined,
+        iconColor: const Color(0xFF0284C7),
+        child: StatefulBuilder(builder: (ctx, setSheet) {
+          final selected = _editSelectedWorker ?? workers.first;
+          return Form(
+            key: _editFormKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Worker selector
+                _SheetDropdown(
+                  label: 'Select Worker',
+                  value: workers.firstWhere((w) => w.workerId == selected.workerId, orElse: () => workers.first).workerId,
+                  items: workers.map((w) => '${w.workerId} — ${w.name}').toList(),
+                  rawItems: workers.map((w) => w.workerId).toList(),
+                  onChanged: (v) {
+                    if (v != null) {
+                      final w = workers.firstWhere((x) => x.workerId == v);
+                      setSheet(() => _populateEditForm(w));
+                    }
+                  },
                 ),
-              ),
-            ],
-          ),
-        ),
+                _SheetField(controller: _editNameController, label: 'Full Name*', hint: 'Full name'),
+                _SheetDropdown(
+                  label: 'Department*', value: _editDept, items: _deptOptions,
+                  onChanged: (v) => setSheet(() => _editDept = v!),
+                ),
+                _SheetDropdown(
+                  label: 'Work Zone*', value: _editZone, items: _zoneOptions,
+                  onChanged: (v) => setSheet(() => _editZone = v!),
+                ),
+                _SheetDropdown(
+                  label: 'Shift*', value: _editShift, items: _shiftOptions,
+                  onChanged: (v) => setSheet(() => _editShift = v!),
+                ),
+                _SheetDropdown(
+                  label: 'Status*', value: _editStatus, items: _statusOptions,
+                  onChanged: (v) => setSheet(() => _editStatus = v!),
+                ),
+                _SheetField(controller: _editBadgeController, label: 'Badge ID*', hint: 'Badge ID'),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: _DateTile(
+                    label: 'Issue Date',
+                    date: _editIssueDate,
+                    onTap: () async {
+                      final d = await _pickDate(ctx, _editIssueDate);
+                      if (d != null) setSheet(() => _editIssueDate = d);
+                    },
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: _DateTile(
+                    label: 'Expiry Date',
+                    date: _editExpiryDate,
+                    onTap: () async {
+                      final d = await _pickDate(ctx, _editExpiryDate);
+                      if (d != null) setSheet(() => _editExpiryDate = d);
+                    },
+                  )),
+                ]),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: _isEditing ? null : () async {
+                      setSheet(() => _isEditing = true);
+                      final updated = selected.copyWith(
+                        name: _editNameController.text.trim().isNotEmpty ? _editNameController.text.trim() : selected.name,
+                        department: _editDept,
+                        workZone: _editZone,
+                        shift: _editShift,
+                        status: _editStatus,
+                        badgeId: _editBadgeController.text.trim().isNotEmpty ? _editBadgeController.text.trim() : selected.badgeId,
+                        badgeIssueDate: _editIssueDate.toIso8601String().substring(0, 10),
+                        badgeExpiryDate: _editExpiryDate.toIso8601String().substring(0, 10),
+                      );
+                      final ok = await _workerService.updateWorker(updated);
+                      setSheet(() => _isEditing = false);
+                      if (mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(ok ? '✅ ${updated.name} updated!' : '❌ Failed to update.'),
+                          backgroundColor: ok ? AppTheme.safeGreen : AppTheme.unsafeRed,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ));
+                      }
+                    },
+                    child: _isEditing
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
       ),
     );
   }
 
-  Future<void> _handleRegister() async {
-    if (!_regFormKey.currentState!.validate()) return;
-    setState(() => _isRegistering = true);
-
-    final newWorker = Worker(
-      workerId: _regIdController.text.trim(),
-      name: _regNameController.text.trim(),
-      department: _regDept,
-      workZone: _regZone,
-      shift: _regShift,
-      badgeId: _regBadgeController.text.trim(),
-      badgeIssueDate: _regIssueDate.toIso8601String().substring(0, 10),
-      badgeExpiryDate: _regExpiryDate.toIso8601String().substring(0, 10),
-      status: _regStatus,
-    );
-
-    final success = await _workerService.addWorker(newWorker);
-    setState(() => _isRegistering = false);
-
-    if (mounted) {
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ Worker ${newWorker.name} registered successfully!'), backgroundColor: AppTheme.safeGreen),
-        );
-        _regIdController.clear();
-        _regNameController.clear();
-        _regBadgeController.clear();
-        _tabController.animateTo(0);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('❌ Failed to register worker. Check duplicate Worker ID or Badge ID.'), backgroundColor: AppTheme.unsafeRed),
-        );
-      }
-    }
-  }
-
-  // --- TAB 3: EDIT WORKER ---
-  Widget _buildEditTab(List<Worker> workers) {
-    if (workers.isEmpty) {
-      return const Center(child: Text('No registered workers available to edit.', style: TextStyle(color: AppTheme.textMuted)));
-    }
-
-    final currentSelected = _editSelectedWorker ?? workers.first;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Form(
-        key: _editFormKey,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.borderColor),
-          ),
-          child: Column(
+  // ─────────────────────────────────────────────
+  // DELETE BOTTOM SHEET
+  // ─────────────────────────────────────────────
+  void _showDeleteSheet(BuildContext context, List<Worker> workers) {
+    if (_delSelectedWorker == null) _delSelectedWorker = workers.first;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _buildSheet(
+        title: 'Delete Worker',
+        icon: Icons.delete_outline_rounded,
+        iconColor: AppTheme.unsafeRed,
+        child: StatefulBuilder(builder: (ctx, setSheet) {
+          final selected = _delSelectedWorker ?? workers.first;
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('✏️ Edit Registered Worker Profile', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<Worker>(
-                value: workers.firstWhere((w) => w.workerId == currentSelected.workerId, orElse: () => workers.first),
-                decoration: const InputDecoration(labelText: 'Select Worker to Edit'),
-                items: workers.map((w) {
-                  return DropdownMenuItem(
-                    value: w,
-                    child: Text('${w.workerId} — ${w.name}', style: const TextStyle(fontSize: 13)),
-                  );
-                }).toList(),
-                onChanged: (w) {
-                  if (w != null) _populateEditForm(w);
+              _SheetDropdown(
+                label: 'Select Worker to Remove',
+                value: workers.firstWhere((w) => w.workerId == selected.workerId, orElse: () => workers.first).workerId,
+                items: workers.map((w) => '${w.workerId} — ${w.name}').toList(),
+                rawItems: workers.map((w) => w.workerId).toList(),
+                onChanged: (v) {
+                  if (v != null) setSheet(() {
+                    _delSelectedWorker = workers.firstWhere((x) => x.workerId == v);
+                    _confirmDelete = false;
+                  });
                 },
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                initialValue: currentSelected.workerId,
-                enabled: false,
-                decoration: const InputDecoration(labelText: 'Worker ID (Immutable)'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _editNameController.text.isEmpty ? (TextEditingController(text: currentSelected.name)) : _editNameController,
-                decoration: const InputDecoration(labelText: 'Full Name*'),
-                validator: (val) => (val == null || val.trim().isEmpty) ? 'Name is required' : null,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _editDept,
-                decoration: const InputDecoration(labelText: 'Department*'),
-                items: _deptOptions.map((d) => DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 13)))).toList(),
-                onChanged: (v) => setState(() => _editDept = v!),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _editZone,
-                decoration: const InputDecoration(labelText: 'Work Zone*'),
-                items: _zoneOptions.map((z) => DropdownMenuItem(value: z, child: Text(z, style: const TextStyle(fontSize: 12)))).toList(),
-                onChanged: (v) => setState(() => _editZone = v!),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _editShift,
-                decoration: const InputDecoration(labelText: 'Shift Assignment*'),
-                items: _shiftOptions.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
-                onChanged: (v) => setState(() => _editShift = v!),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _editStatus,
-                decoration: const InputDecoration(labelText: 'Status*'),
-                items: _statusOptions.map((st) => DropdownMenuItem(value: st, child: Text(st, style: const TextStyle(fontSize: 13)))).toList(),
-                onChanged: (v) => setState(() => _editStatus = v!),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _editBadgeController.text.isEmpty ? (TextEditingController(text: currentSelected.effectiveBadgeId)) : _editBadgeController,
-                decoration: const InputDecoration(labelText: 'Badge ID*'),
-                validator: (val) => (val == null || val.trim().isEmpty) ? 'Badge ID is required' : null,
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppTheme.unsafeRedBg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.unsafeRed.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(selected.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: AppTheme.unsafeRed)),
+                    const SizedBox(height: 4),
+                    Text('${selected.workerId} · ${selected.department}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    Text('Cumulative Dose: ${selected.cumulativeDose.toStringAsFixed(2)} ppm•h', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.calendar_today_rounded, size: 16),
-                      label: Text('Issue: ${_editIssueDate.toIso8601String().substring(0, 10)}', style: const TextStyle(fontSize: 11)),
-                      onPressed: () async {
-                        final d = await showDatePicker(
-                          context: context,
-                          initialDate: _editIssueDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2030),
-                        );
-                        if (d != null) setState(() => _editIssueDate = d);
-                      },
-                    ),
+                  Checkbox(
+                    value: _confirmDelete,
+                    activeColor: AppTheme.unsafeRed,
+                    onChanged: (v) => setSheet(() => _confirmDelete = v ?? false),
                   ),
-                  const SizedBox(width: 8),
                   Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.event_busy_rounded, size: 16),
-                      label: Text('Expiry: ${_editExpiryDate.toIso8601String().substring(0, 10)}', style: const TextStyle(fontSize: 11)),
-                      onPressed: () async {
-                        final d = await showDatePicker(
-                          context: context,
-                          initialDate: _editExpiryDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2030),
-                        );
-                        if (d != null) setState(() => _editExpiryDate = d);
-                      },
+                    child: Text(
+                      'Confirm permanent removal of ${selected.workerId}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: _isEditing
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Icon(Icons.save_rounded),
-                  label: const Text('Save Worker Changes'),
-                  onPressed: _isEditing ? null : () => _handleEdit(currentSelected),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7)),
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _confirmDelete ? AppTheme.unsafeRed : AppTheme.borderColor,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: (_confirmDelete && !_isDeleting) ? () async {
+                    setSheet(() => _isDeleting = true);
+                    final ok = await _workerService.deleteWorker(selected.workerId);
+                    setSheet(() { _isDeleting = false; _confirmDelete = false; _delSelectedWorker = null; });
+                    if (mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(ok ? '✅ ${selected.name} deleted.' : '❌ Failed to delete.'),
+                        backgroundColor: ok ? AppTheme.safeGreen : AppTheme.unsafeRed,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ));
+                    }
+                  } : null,
+                  child: _isDeleting
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : Text('Delete Permanently', style: TextStyle(fontWeight: FontWeight.w800, color: _confirmDelete ? Colors.white : AppTheme.textMuted)),
                 ),
               ),
             ],
-          ),
-        ),
+          );
+        }),
       ),
     );
   }
 
-  Future<void> _handleEdit(Worker selected) async {
-    setState(() => _isEditing = true);
+  // ─────────────────────────────────────────────
+  // HELPERS
+  // ─────────────────────────────────────────────
+  Future<DateTime?> _pickDate(BuildContext ctx, DateTime initial) => showDatePicker(
+    context: ctx,
+    initialDate: initial,
+    firstDate: DateTime(2020),
+    lastDate: DateTime(2030),
+  );
 
-    final updated = selected.copyWith(
-      name: _editNameController.text.trim().isNotEmpty ? _editNameController.text.trim() : selected.name,
-      department: _editDept,
-      workZone: _editZone,
-      shift: _editShift,
-      status: _editStatus,
-      badgeId: _editBadgeController.text.trim().isNotEmpty ? _editBadgeController.text.trim() : selected.badgeId,
-      badgeIssueDate: _editIssueDate.toIso8601String().substring(0, 10),
-      badgeExpiryDate: _editExpiryDate.toIso8601String().substring(0, 10),
-    );
-
-    final success = await _workerService.updateWorker(updated);
-    setState(() => _isEditing = false);
-
-    if (mounted) {
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ Profile for ${updated.name} updated!'), backgroundColor: AppTheme.safeGreen),
-        );
-        _tabController.animateTo(0);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('❌ Failed to update worker profile.'), backgroundColor: AppTheme.unsafeRed),
-        );
-      }
-    }
-  }
-
-  // --- TAB 4: DELETE WORKER ---
-  Widget _buildDeleteTab(List<Worker> workers) {
-    if (workers.isEmpty) {
-      return const Center(child: Text('No registered workers available to delete.', style: TextStyle(color: AppTheme.textMuted)));
-    }
-
-    final currentSelected = _delSelectedWorker ?? workers.first;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
+  Widget _buildSheet({required String title, required IconData icon, required Color iconColor, required Widget child}) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.92,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.borderColor),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('🗑️ Remove Registered Worker', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.unsafeRed)),
             const SizedBox(height: 12),
-            DropdownButtonFormField<Worker>(
-              value: workers.firstWhere((w) => w.workerId == currentSelected.workerId, orElse: () => workers.first),
-              decoration: const InputDecoration(labelText: 'Select Worker to Delete'),
-              items: workers.map((w) {
-                return DropdownMenuItem(
-                  value: w,
-                  child: Text('${w.workerId} — ${w.name}', style: const TextStyle(fontSize: 13)),
-                );
-              }).toList(),
-              onChanged: (w) {
-                if (w != null) setState(() => _delSelectedWorker = w);
-              },
-            ),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.borderColor, borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.unsafeRedBg,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.unsafeRed.withValues(alpha: 0.4)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
                 children: [
-                  const Text('⚠️ Danger: You are about to permanently delete:', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.unsafeRed, fontSize: 13)),
-                  const SizedBox(height: 4),
-                  Text('• Name: ${currentSelected.name} (${currentSelected.workerId})', style: const TextStyle(fontSize: 12, color: Color(0xFF7F1D1D))),
-                  Text('• Dept: ${currentSelected.department} | Zone: ${currentSelected.workZone}', style: const TextStyle(fontSize: 12, color: Color(0xFF7F1D1D))),
-                  Text('• Cumulative Dose: ${currentSelected.cumulativeDose.toStringAsFixed(2)} ppm•h', style: const TextStyle(fontSize: 12, color: Color(0xFF7F1D1D), fontWeight: FontWeight.bold)),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, color: iconColor, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
                 ],
               ),
             ),
-            const SizedBox(height: 14),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('I confirm permanent removal of worker ${currentSelected.workerId}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-              value: _confirmDelete,
-              onChanged: (v) => setState(() => _confirmDelete = v ?? false),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: _isDeleting
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.delete_forever_rounded),
-                label: const Text('Delete Worker Permanently'),
-                onPressed: (_confirmDelete && !_isDeleting) ? () => _handleDelete(currentSelected) : null,
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.unsafeRed),
+            const SizedBox(height: 16),
+            const Divider(height: 1, color: AppTheme.borderColor),
+            Expanded(
+              child: ListView(
+                controller: controller,
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                children: [child],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Future<void> _handleDelete(Worker w) async {
-    setState(() => _isDeleting = true);
-    final success = await _workerService.deleteWorker(w.workerId);
-    setState(() {
-      _isDeleting = false;
-      _confirmDelete = false;
-      _delSelectedWorker = null;
-    });
-
-    if (mounted) {
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ Worker ${w.name} (${w.workerId}) deleted.'), backgroundColor: AppTheme.safeGreen),
-        );
-        _tabController.animateTo(0);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('❌ Failed to delete worker.'), backgroundColor: AppTheme.unsafeRed),
-        );
-      }
-    }
-  }
-
-  Widget _buildMetricTile(String title, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor),
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(title, style: const TextStyle(fontSize: 10, color: AppTheme.textMuted, fontWeight: FontWeight.w700), maxLines: 1),
-                const SizedBox(height: 2),
-                Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppTheme.textPrimary, letterSpacing: -0.3)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String label, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppTheme.borderColor),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
-            const SizedBox(width: 4),
-            const Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.textMuted),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showDeptFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Filter by Department', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        children: ['All Departments', ..._deptOptions].map((d) {
-          return SimpleDialogOption(
-            child: Text(d),
-            onPressed: () {
-              setState(() => _selectedDept = d);
-              Navigator.pop(ctx);
-            },
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  void _showZoneFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Filter by Work Zone', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        children: ['All Work Zones', ..._zoneOptions].map((z) {
-          return SimpleDialogOption(
-            child: Text(z),
-            onPressed: () {
-              setState(() => _selectedZone = z);
-              Navigator.pop(ctx);
-            },
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  void _showStatusFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Filter by Status', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        children: ['All Statuses', ..._statusOptions].map((s) {
-          return SimpleDialogOption(
-            child: Text(s),
-            onPressed: () {
-              setState(() => _selectedStatus = s);
-              Navigator.pop(ctx);
-            },
-          );
-        }).toList(),
       ),
     );
   }
 }
 
-class _TabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final TabBar tabBar;
-  _TabBarHeaderDelegate(this.tabBar);
+// ─────────────────────────────────────────────
+// WORKER TILE — Compact & Clickable
+// ─────────────────────────────────────────────
+class _WorkerTile extends StatelessWidget {
+  final Worker worker;
+  final VoidCallback onTap;
+  const _WorkerTile({required this.worker, required this.onTap});
 
   @override
-  double get minExtent => tabBar.preferredSize.height;
-  @override
-  double get maxExtent => tabBar.preferredSize.height;
+  Widget build(BuildContext context) {
+    Color statusColor = AppTheme.safeGreen;
+    Color statusBg = AppTheme.safeGreenBg;
+    String statusLabel = 'ACTIVE';
 
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: Colors.white,
-      child: tabBar,
+    if (worker.isBadgeExpired) {
+      statusColor = AppTheme.unsafeRed;
+      statusBg = AppTheme.unsafeRedBg;
+      statusLabel = 'EXPIRED';
+    } else if (worker.cumulativeDose >= 50.0 || worker.status != 'Active') {
+      statusColor = AppTheme.unsafeRed;
+      statusBg = AppTheme.unsafeRedBg;
+      statusLabel = worker.status != 'Active' ? worker.status.toUpperCase() : 'UNSAFE';
+    } else if (worker.cumulativeDose >= 10.0) {
+      statusColor = AppTheme.cautionYellow;
+      statusBg = AppTheme.cautionYellowBg;
+      statusLabel = 'CAUTION';
+    }
+
+    // Parse shift end time for display
+    String shiftEnd = '';
+    final shiftStr = worker.shift;
+    final dashIdx = shiftStr.indexOf(' - ');
+    if (dashIdx != -1) {
+      final end = shiftStr.substring(dashIdx + 3).replaceAll(')', '').trim();
+      shiftEnd = end;
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.borderColor),
+            boxShadow: AppTheme.cardShadow,
+          ),
+          child: Row(
+            children: [
+              // Avatar
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceElevated,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    worker.name.isNotEmpty ? worker.name[0].toUpperCase() : '?',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(worker.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${worker.workerId} · ${worker.department}',
+                      style: const TextStyle(fontSize: 11.5, color: AppTheme.textMuted),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.schedule_rounded, size: 12, color: AppTheme.textFaint),
+                        const SizedBox(width: 3),
+                        Flexible(
+                          child: Text(
+                            worker.shift,
+                            style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (shiftEnd.isNotEmpty) ...[
+                          const Text(' · ends ', style: TextStyle(fontSize: 11, color: AppTheme.textFaint)),
+                          Text(shiftEnd, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.textSecondary)),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, size: 12, color: AppTheme.textFaint),
+                        const SizedBox(width: 3),
+                        Flexible(
+                          child: Text(
+                            worker.workZone.split(' - ').first,
+                            style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Status + arrow
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusBg,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: statusColor.withValues(alpha: 0.35)),
+                    ),
+                    child: Text(statusLabel, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: statusColor, letterSpacing: 0.4)),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${worker.cumulativeDose.toStringAsFixed(1)} ppm•h',
+                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: statusColor),
+                  ),
+                  const SizedBox(height: 4),
+                  const Icon(Icons.chevron_right_rounded, size: 16, color: AppTheme.textFaint),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
+}
+
+// ─────────────────────────────────────────────
+// ACTION BUTTON (Register / Edit / Delete)
+// ─────────────────────────────────────────────
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onTap;
+  const _ActionButton({required this.label, required this.icon, required this.color, this.onTap});
 
   @override
-  bool shouldRebuild(_TabBarHeaderDelegate oldDelegate) => false;
+  Widget build(BuildContext context) {
+    final disabled = onTap == null;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 40,
+          decoration: BoxDecoration(
+            color: disabled ? AppTheme.surfaceElevated : color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: disabled ? AppTheme.borderColor : color.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 15, color: disabled ? AppTheme.textFaint : color),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: disabled ? AppTheme.textFaint : color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// SHEET HELPERS
+// ─────────────────────────────────────────────
+class _SheetField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+  const _SheetField({required this.controller, required this.label, required this.hint});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextFormField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          filled: true,
+          fillColor: AppTheme.scaffoldBg,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.borderColor)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.borderColor)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.safetyOrange, width: 1.5)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          labelStyle: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
+        ),
+        validator: (val) => (val == null || val.trim().isEmpty) ? '$label is required' : null,
+      ),
+    );
+  }
+}
+
+class _SheetDropdown extends StatelessWidget {
+  final String label;
+  final String value;
+  final List<String> items;
+  final List<String>? rawItems;
+  final ValueChanged<String?> onChanged;
+  const _SheetDropdown({required this.label, required this.value, required this.items, required this.onChanged, this.rawItems});
+
+  @override
+  Widget build(BuildContext context) {
+    final values = rawItems ?? items;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        value: values.contains(value) ? value : values.first,
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: AppTheme.scaffoldBg,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.borderColor)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.borderColor)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.safetyOrange, width: 1.5)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          labelStyle: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
+        ),
+        items: List.generate(items.length, (i) => DropdownMenuItem(
+          value: values[i],
+          child: Text(items[i], style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+        )),
+        onChanged: onChanged,
+        isExpanded: true,
+      ),
+    );
+  }
+}
+
+class _DateTile extends StatelessWidget {
+  final String label;
+  final DateTime date;
+  final VoidCallback onTap;
+  const _DateTile({required this.label, required this.date, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.scaffoldBg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.borderColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textMuted, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            Row(children: [
+              const Icon(Icons.calendar_today_rounded, size: 13, color: AppTheme.safetyOrange),
+              const SizedBox(width: 5),
+              Text(date.toIso8601String().substring(0, 10), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
 }

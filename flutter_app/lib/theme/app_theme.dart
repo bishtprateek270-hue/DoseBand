@@ -73,30 +73,30 @@ class AppTheme {
   // Premium Box Shadows
   static List<BoxShadow> get cardShadow => [
     BoxShadow(
-      color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-      blurRadius: 10,
-      offset: const Offset(0, 4),
+      color: const Color(0xFF0F172A).withValues(alpha: 0.05),
+      blurRadius: 16,
+      offset: const Offset(0, 8),
     ),
     BoxShadow(
-      color: const Color(0xFF0F172A).withValues(alpha: 0.02),
-      blurRadius: 2,
-      offset: const Offset(0, 1),
+      color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+      blurRadius: 4,
+      offset: const Offset(0, 2),
     ),
   ];
 
   static List<BoxShadow> get elevatedShadow => [
     BoxShadow(
-      color: const Color(0xFF0F172A).withValues(alpha: 0.08),
-      blurRadius: 20,
-      offset: const Offset(0, 8),
+      color: safetyOrange.withValues(alpha: 0.12),
+      blurRadius: 24,
+      offset: const Offset(0, 10),
     ),
   ];
 
   static List<BoxShadow> get orangeGlow => [
     BoxShadow(
-      color: safetyOrange.withValues(alpha: 0.25),
-      blurRadius: 14,
-      offset: const Offset(0, 4),
+      color: safetyOrange.withValues(alpha: 0.35),
+      blurRadius: 20,
+      offset: const Offset(0, 6),
     ),
   ];
 

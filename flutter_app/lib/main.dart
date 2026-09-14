@@ -35,7 +35,6 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
-  int _previousIndex = 0;
   final WorkerService _workerService = WorkerService();
 
   @override
@@ -203,24 +202,17 @@ class _MainNavigationState extends State<MainNavigation> {
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
         transitionBuilder: (child, animation) {
-          // determine direction: forward = slide left, back = slide right
-          final isForward = _currentIndex >= _previousIndex;
-          final begin = isForward
-              ? const Offset(1.0, 0.0)
-              : const Offset(-1.0, 0.0);
-          final slideAnim = Tween<Offset>(
-            begin: begin,
-            end: Offset.zero,
-          ).animate(CurvedAnimation(
+          final fadeAnim = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          );
+          final scaleAnim = Tween<double>(begin: 0.96, end: 1.0).animate(CurvedAnimation(
             parent: animation,
             curve: Curves.easeOutCubic,
           ));
           return FadeTransition(
-            opacity: CurvedAnimation(
-              parent: animation,
-              curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
-            ),
-            child: SlideTransition(position: slideAnim, child: child),
+            opacity: fadeAnim,
+            child: ScaleTransition(scale: scaleAnim, child: child),
           );
         },
         layoutBuilder: (currentChild, previousChildren) => Stack(
@@ -271,7 +263,6 @@ class _MainNavigationState extends State<MainNavigation> {
             return Expanded(
               child: GestureDetector(
                 onTap: () => setState(() {
-                  _previousIndex = _currentIndex;
                   _currentIndex = item.index;
                 }),
                 behavior: HitTestBehavior.opaque,
