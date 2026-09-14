@@ -1,12 +1,10 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/worker.dart';
 import '../services/worker_service.dart';
 import '../services/dosimetry_service.dart';
-import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 
 class ScannerScreen extends StatefulWidget {
@@ -19,29 +17,39 @@ class ScannerScreen extends StatefulWidget {
 class _ScannerScreenState extends State<ScannerScreen> {
   final WorkerService _workerService = WorkerService();
   final DosimetryService _dosimetryService = DosimetryService();
-  final ApiService _apiService = ApiService();
   final ImagePicker _picker = ImagePicker();
 
   // Scanning Mode: 'full_badge' or 'standalone_strip'
   String _scanMode = 'full_badge';
 
-  File? _image;
-  Uint8List? _imageBytes;
-  String _imageFileName = 'strip.jpg';
-  bool _isAnalyzing = false;
-
-  // Step 1: Worker Identification
+  // --------------------------------------------------------------------------
+  // STEP 1 STATE: Worker Identification & QR Badge (Completely Isolated)
+  // --------------------------------------------------------------------------
   Worker? _identifiedWorker;
-  bool _isWorkerIdentified = false;
   bool _isQrVerified = false;
+  Uint8List? _qrImageBytes;
+  File? _qrImageFile;
+  String? _qrFileName;
+  bool _isQrProcessing = false;
+  String? _qrStatusMessage;
 
-  // Step 2: Environmental Inputs
+  // --------------------------------------------------------------------------
+  // STEP 2 STATE: Physical Sensor Strip / Prototype Image (Completely Isolated)
+  // --------------------------------------------------------------------------
+  Uint8List? _sensorImageBytes;
+  File? _sensorImageFile;
+  String _sensorFileName = 'sensor_strip.jpg';
+  bool _isSensorAnalyzing = false;
+
+  // Step 2 Environmental Inputs
   double _temperatureC = 25.0;
   double _exposureTimeHours = 1.0;
   double _humidityRh = 50.0;
   bool _autoHumidity = true;
 
-  // Step 3: Analysis Results
+  // --------------------------------------------------------------------------
+  // STEP 3 STATE: Analysis Results
+  // --------------------------------------------------------------------------
   DosimetryResult? _latestResult;
 
   @override
@@ -49,8 +57,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
     super.initState();
     _workerService.addListener(_onServiceUpdate);
     _identifiedWorker = null;
-    _isWorkerIdentified = false;
     _isQrVerified = false;
+    _qrImageBytes = null;
+    _qrImageFile = null;
+    _sensorImageBytes = null;
+    _sensorImageFile = null;
   }
 
   @override
@@ -67,24 +78,240 @@ class _ScannerScreenState extends State<ScannerScreen> {
     }
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  // ==========================================================================
+  // STEP 1 HANDLERS: QR Badge Acquisition & Verification
+  // ==========================================================================
+  Future<void> _pickQrImage(ImageSource source) async {
+    try {
+      setState(() {
+        _isQrProcessing = true;
+        _qrStatusMessage = null;
+      });
+
+      // Use 100% quality - preserve full original resolution for QR decoding
+      final picked = await _picker.pickImage(source: source, imageQuality: 100);
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+
+        if (kDebugMode) {
+          debugPrint('=== QR DEBUG ===');
+          debugPrint('Source: ${source == ImageSource.camera ? "camera" : "gallery"}');
+          debugPrint('Original file path: ${picked.path}');
+          debugPrint('Original file size: ${bytes.length} bytes');
+        }
+
+        final res = await _workerService.verifyBadge(
+          imageBytes: bytes,
+          fileName: picked.name,
+        );
+
+        if (kDebugMode) {
+          debugPrint('Raw decoded payload: ${res['raw_payload']}');
+          debugPrint('Status: ${res['status']}');
+          debugPrint('Valid: ${res['valid']}');
+          debugPrint('Message: ${res['message']}');
+          debugPrint('================');
+        }
+
+        _handleQrVerificationResponse(res, bytes, File(picked.path), picked.name);
+      } else {
+        setState(() => _isQrProcessing = false);
+      }
+    } catch (e) {
+      setState(() => _isQrProcessing = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('QR verification error: $e'), backgroundColor: AppTheme.unsafeRed),
+        );
+      }
+    }
+  }
+
+  void _handleQrVerificationResponse(
+    Map<String, dynamic> res, [
+    Uint8List? imageBytes,
+    File? imageFile,
+    String? fileName,
+  ]) {
+    final bool isValid = res['valid'] == true;
+    final workerData = res['worker'] as Map<String, dynamic>?;
+
+    if (isValid && workerData != null) {
+      final w = Worker.fromMap(workerData);
+      setState(() {
+        _identifiedWorker = w;
+        _isQrVerified = true;
+        _isQrProcessing = false;
+        _qrImageBytes = imageBytes;
+        _qrImageFile = imageFile;
+        _qrFileName = fileName;
+        _qrStatusMessage = res['message'] ?? 'Worker verified successfully.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Verified Badge for ${w.name} (${w.workerId})'),
+          backgroundColor: AppTheme.safeGreen,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } else {
+      setState(() {
+        _identifiedWorker = null;
+        _isQrVerified = false;
+        _isQrProcessing = false;
+        _qrImageBytes = null;
+        _qrImageFile = null;
+        _qrFileName = null;
+        _qrStatusMessage = res['message'] ?? 'This is not a valid DoseBand QR.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ ${res['message'] ?? 'This is not a valid DoseBand QR.'}'),
+          backgroundColor: AppTheme.unsafeRed,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  void _unlinkWorker() {
+    setState(() {
+      _identifiedWorker = null;
+      _isQrVerified = false;
+      _qrImageBytes = null;
+      _qrImageFile = null;
+      _qrFileName = null;
+      _qrStatusMessage = null;
+    });
+  }
+
+  void _showQuickSelectDialog() {
+    final workers = _workerService.workers;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Select Registered Worker Badge',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: workers.length,
+                itemBuilder: (ctx, idx) {
+                  final w = workers[idx];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: Color(0xFF0F172A),
+                        child: Text('👷'),
+                      ),
+                      title: Text(w.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      subtitle: Text('${w.workerId} • ${w.department} • Badge: ${w.effectiveBadgeId}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                      trailing: const Icon(Icons.qr_code_2_rounded, color: AppTheme.safetyOrange),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        final payload = '{"type":"doseband_worker","version":1,"worker_id":"${w.workerId}","badge_id":"${w.effectiveBadgeId}"}';
+                        _workerService.verifyBadge(rawPayload: payload).then((res) => _handleQrVerificationResponse(res));
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================================
+  // STEP 2 HANDLERS: Physical Sensor Strip Image Acquisition
+  // ==========================================================================
+  Future<void> _pickSensorImage(ImageSource source) async {
     try {
       final picked = await _picker.pickImage(source: source, imageQuality: 95);
       if (picked != null) {
         final bytes = await picked.readAsBytes();
         setState(() {
-          _image = File(picked.path);
-          _imageBytes = bytes;
-          _imageFileName = picked.name;
+          _sensorImageFile = File(picked.path);
+          _sensorImageBytes = bytes;
+          _sensorFileName = picked.name;
           _latestResult = null;
         });
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load image: $e'), backgroundColor: AppTheme.unsafeRed),
+          SnackBar(content: Text('Failed to load sensor strip image: $e'), backgroundColor: AppTheme.unsafeRed),
         );
       }
+    }
+  }
+
+  void _clearSensorImage() {
+    setState(() {
+      _sensorImageFile = null;
+      _sensorImageBytes = null;
+      _sensorFileName = 'sensor_strip.jpg';
+      _latestResult = null;
+    });
+  }
+
+  // ==========================================================================
+  // STEP 3 HANDLERS: Dosimetry Optical ML Analysis
+  // ==========================================================================
+  Future<void> _analyzeSensorStrip() async {
+    if (_sensorImageBytes == null) return;
+    if (_scanMode == 'full_badge' && _identifiedWorker == null) return;
+
+    setState(() => _isSensorAnalyzing = true);
+
+    final String effectiveWorkerId = _identifiedWorker?.workerId ?? 'W-DEMO';
+
+    final result = await _dosimetryService.processImage(
+      imageBytes: _sensorImageBytes!,
+      fileName: _sensorFileName,
+      workerId: effectiveWorkerId,
+      temperatureC: _temperatureC,
+      humidityRh: _autoHumidity ? null : _humidityRh,
+      exposureTimeHours: _exposureTimeHours,
+      badgeMode: _scanMode == 'standalone_strip' ? 'STANDALONE_H2S_STRIP' : 'FULL_DOSEBAND_BADGE',
+      scanMode: _scanMode,
+    );
+
+    setState(() {
+      _latestResult = result;
+      _isSensorAnalyzing = false;
+    });
+
+    if (mounted) {
+      _showResultDialog(result);
     }
   }
 
@@ -169,154 +396,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
-  Future<void> _verifyWorkerQr(ImageSource source) async {
-    try {
-      final picked = await _picker.pickImage(source: source, imageQuality: 95);
-      if (picked != null) {
-        final bytes = await picked.readAsBytes();
-        final res = await _workerService.verifyBadge(
-          imageBytes: bytes,
-          fileName: picked.name,
-        );
-        _handleQrVerificationResponse(res);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('QR verification error: $e'), backgroundColor: AppTheme.unsafeRed),
-        );
-      }
-    }
-  }
-
-  void _handleQrVerificationResponse(Map<String, dynamic> res) {
-    final bool isValid = res['valid'] == true;
-    final workerData = res['worker'] as Map<String, dynamic>?;
-
-    if (isValid && workerData != null) {
-      final w = Worker.fromMap(workerData);
-      setState(() {
-        _identifiedWorker = w;
-        _isWorkerIdentified = true;
-        _isQrVerified = true;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ Verified Badge for ${w.name} (${w.workerId})'),
-          backgroundColor: AppTheme.safeGreen,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } else {
-      setState(() {
-        _identifiedWorker = null;
-        _isWorkerIdentified = false;
-        _isQrVerified = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ ${res['message'] ?? 'This is not a valid DoseBand QR.'}'),
-          backgroundColor: AppTheme.unsafeRed,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    }
-  }
-
-  void _showQuickSelectDialog() {
-    final workers = _workerService.workers;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF0F172A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Select Registered Worker Badge',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white70),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: workers.length,
-                itemBuilder: (ctx, idx) {
-                  final w = workers[idx];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF334155)),
-                    ),
-                    child: ListTile(
-                      leading: const CircleAvatar(
-                        backgroundColor: Color(0xFF0F172A),
-                        child: Text('👷'),
-                      ),
-                      title: Text(w.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      subtitle: Text('${w.workerId} • ${w.department} • Badge: ${w.effectiveBadgeId}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-                      trailing: const Icon(Icons.qr_code_2_rounded, color: AppTheme.safetyOrange),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        final payload = '{"type":"doseband_worker","version":1,"worker_id":"${w.workerId}","badge_id":"${w.effectiveBadgeId}"}';
-                        _workerService.verifyBadge(rawPayload: payload).then((res) => _handleQrVerificationResponse(res));
-                      },
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _analyzeStrip() async {
-    if (_imageBytes == null) return;
-    if (_scanMode == 'full_badge' && _identifiedWorker == null) return;
-
-    setState(() => _isAnalyzing = true);
-
-    final String effectiveWorkerId = _identifiedWorker?.workerId ?? 'W-DEMO';
-
-    final result = await _dosimetryService.processImage(
-      imageBytes: _imageBytes!,
-      fileName: _imageFileName,
-      workerId: effectiveWorkerId,
-      temperatureC: _temperatureC,
-      humidityRh: _autoHumidity ? null : _humidityRh,
-      exposureTimeHours: _exposureTimeHours,
-      badgeMode: _scanMode == 'standalone_strip' ? 'STANDALONE_H2S_STRIP' : 'FULL_DOSEBAND_BADGE',
-      scanMode: _scanMode,
-    );
-
-    setState(() {
-      _latestResult = result;
-      _isAnalyzing = false;
-    });
-
-    if (mounted) {
-      _showResultDialog(result);
-    }
-  }
-
   void _showResultDialog(DosimetryResult r) {
     Color statusColor = AppTheme.safeGreen;
     if (!r.isValid) {
@@ -351,134 +430,82 @@ class _ScannerScreenState extends State<ScannerScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (r.isStandalone || r.isPrototypeEstimate) ...[
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF3C7),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFF59E0B)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('⚠️', style: TextStyle(fontSize: 16)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          r.disclaimer ?? 'PROTOTYPE ESTIMATE: Standalone strip scan is an uncalibrated visual estimation. For safety compliance, scan inside the complete DoseBand enclosure with environmental sensors.',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF92400E)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              if (!r.isValid) ...[
+              if (r.isValid) ...[
+                // Metric Badge Header
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppTheme.unsafeRedBg,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.unsafeRed),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(r.userMessage, style: const TextStyle(color: Color(0xFF991B1B), fontWeight: FontWeight.bold, fontSize: 13)),
-                      if (r.rejectionReasons.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        ...r.rejectionReasons.map((reason) => Text('• $reason', style: const TextStyle(fontSize: 11, color: Color(0xFF7F1D1D)))),
-                      ],
-                    ],
-                  ),
-                ),
-              ] else ...[
-                // Metric Highlights
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                   ),
-                  child: Column(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Estimated H₂S Gas:', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
-                          Text('${r.estimatedH2sPpm.toStringAsFixed(2)} ppm', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: statusColor)),
+                          const Text('ESTIMATED H₂S DOSE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppTheme.textMuted)),
+                          Text(
+                            '${r.estimatedH2sPpm.toStringAsFixed(2)} ppm·hr',
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: statusColor),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Shift Exposure Dose:', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                          Text('${r.cumulativeDosePpmH.toStringAsFixed(2)} ppm•h', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Risk Classification:', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                          Text(r.riskLevel.toUpperCase(), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: statusColor)),
-                        ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          r.riskLevel.toUpperCase(),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11),
+                        ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
+
+                // Environmental & Quality Summary
+                _buildModalRow('Environmental Temp:', '${r.temperatureC.toStringAsFixed(1)} °C'),
+                _buildModalRow('Relative Humidity:', '${r.predictedHumidity.toStringAsFixed(1)} % RH'),
+                _buildModalRow('Exposure Duration:', '${_exposureTimeHours.toStringAsFixed(1)} hours'),
+                _buildModalRow('Lead Acetate Sensor Δ:', '${(r.rawIntensity * 100).toStringAsFixed(1)}% optical darkening'),
+                _buildModalRow('Analysis Confidence:', '${r.confidencePct}% (${r.dataSource})'),
+                const Divider(height: 20),
+
+                // OSHA Action Guidance
                 Text(
-                  _identifiedWorker != null
-                      ? 'Worker: ${_identifiedWorker!.name} (${_identifiedWorker!.workerId})'
-                      : 'Worker: Unassigned Demo (W-DEMO)',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                  'COMPLIANCE DIRECTIVE (DGMS / OSHA):',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey.shade600),
                 ),
+                const SizedBox(height: 4),
                 Text(
-                  'Scan Mode: ${r.isStandalone ? "Standalone H₂S Strip (Demo)" : "Full DoseBand Enclosure"}',
-                  style: TextStyle(fontSize: 12, color: r.isStandalone ? const Color(0xFFD97706) : const Color(0xFF0284C7), fontWeight: FontWeight.bold),
+                  r.actionGuidance,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
                 ),
-                Text('Optical Darkening / Staining: ${(r.rawIntensity * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
-                Text('Temperature: ${r.temperatureC}°C | Humidity: ${r.predictedHumidity.toStringAsFixed(0)}% RH', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-                const SizedBox(height: 8),
-                Text(
-                  '💡 Guidance: ${r.actionGuidance}',
-                  style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
-                ),
-              ],
-              if (r.debugOverlayBase64 != null && r.debugOverlayBase64!.isNotEmpty) ...[
-                const SizedBox(height: 14),
+              ] else ...[
+                // Rejection Details
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
+                    color: AppTheme.unsafeRedBg,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF334155)),
+                    border: Border.all(color: AppTheme.unsafeRed.withValues(alpha: 0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.crop_free_rounded, color: AppTheme.safetyOrange, size: 14),
-                          const SizedBox(width: 6),
-                          Text(
-                            r.isStandalone ? 'Standalone Strip ROI Detection' : '3D Prototype ROI & Perspective Alignment',
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
-                        ],
+                      const Text(
+                        'IMAGE REJECTED BY COMPUTER VISION PIPELINE',
+                        style: TextStyle(color: AppTheme.unsafeRed, fontWeight: FontWeight.w900, fontSize: 11.5),
                       ),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.memory(
-                          base64Decode(r.debugOverlayBase64!),
-                          fit: BoxFit.contain,
-                        ),
+                      const SizedBox(height: 6),
+                      Text(
+                        r.userMessage.isNotEmpty ? r.userMessage : 'Optical sensor validation failed. Please recapture the exposure strip with proper lighting.',
+                        style: const TextStyle(color: Color(0xFF7F1D1D), fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
@@ -490,33 +517,44 @@ class _ScannerScreenState extends State<ScannerScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close', style: TextStyle(color: AppTheme.textMuted)),
+            child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
-          if (r.estimatedH2sPpm >= 15.0 || r.riskLevel.contains('Unsafe'))
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.unsafeRed),
-              icon: const Icon(Icons.warning_amber_rounded, size: 16),
-              label: const Text('ALERT EVACUATION PROTOCOL'),
+          if (r.isValid && r.riskLevel.startsWith('Unsafe'))
+            ElevatedButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 _showEmergencyEvacuationAlert(context, r);
               },
-            ),
-          if (r.isValid && r.isAllowedToSave && _identifiedWorker != null)
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.unsafeRed),
+              child: const Text('Emergency Evacuation Protocol', style: TextStyle(fontWeight: FontWeight.bold)),
+            )
+          else if (r.isValid)
             ElevatedButton.icon(
               icon: const Icon(Icons.save_rounded, size: 16),
-              label: const Text('Save to SQLite DB'),
-              onPressed: () async {
+              label: const Text('Log to Workforce Database', style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () {
                 Navigator.pop(ctx);
-                final saved = await _dosimetryService.saveReading(
-                  workerId: _identifiedWorker!.workerId,
-                  result: r,
-                );
-                if (mounted) {
+                if (_identifiedWorker != null) {
+                  _workerService.addReading(
+                    workerId: _identifiedWorker!.workerId,
+                    dose: r.cumulativeDosePpmH,
+                    intensity: r.rawIntensity,
+                    riskLevel: r.riskLevel,
+                    isExpired: r.isBadgeExpired,
+                    expiryStatusMessage: r.expiryStatusMessage,
+                    estimatedH2sPpm: r.estimatedH2sPpm,
+                    exposureTime: _exposureTimeHours,
+                    temperature: r.temperatureC,
+                    humidity: r.predictedHumidity,
+                    badgeMode: r.badgeMode,
+                    dataSource: r.dataSource,
+                    confidencePct: r.confidencePct,
+                    actionGuidance: r.actionGuidance,
+                  );
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(saved ? '✅ Exposure reading saved to SQLite database!' : '❌ Failed to save reading.'),
-                      backgroundColor: saved ? AppTheme.safeGreen : AppTheme.unsafeRed,
+                      content: Text('✅ Reading logged for ${_identifiedWorker!.name} (${_identifiedWorker!.workerId})'),
+                      backgroundColor: AppTheme.safeGreen,
                     ),
                   );
                 }
@@ -528,10 +566,23 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  Widget _buildModalRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+          Text(value, style: const TextStyle(fontSize: 11.5, color: AppTheme.textPrimary, fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isStandalone = _scanMode == 'standalone_strip';
-    final bool canAnalyze = _imageBytes != null && (isStandalone || _identifiedWorker != null) && !_isAnalyzing;
+    final bool canAnalyze = _sensorImageBytes != null && (isStandalone || _identifiedWorker != null) && !_isSensorAnalyzing;
 
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
@@ -572,122 +623,66 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Scanning Mode Selector Card
+            // Scanning Mode Selector Toggle
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.borderColor),
-                boxShadow: AppTheme.cardShadow,
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF1E293B)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  const Text(
-                    'Select Scanning Mode',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.textSecondary),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _scanMode = 'full_badge';
-                              _latestResult = null;
-                            });
-                          },
-                          borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                            decoration: BoxDecoration(
-                              color: !isStandalone ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: !isStandalone ? const Color(0xFF0F172A) : AppTheme.borderColor,
-                                width: !isStandalone ? 2 : 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.watch_rounded, size: 16, color: !isStandalone ? AppTheme.safetyOrange : AppTheme.textMuted),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Full DoseBand',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w900,
-                                    color: !isStandalone ? Colors.white : AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _scanMode = 'full_badge'),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _scanMode == 'full_badge' ? AppTheme.safetyOrange : Colors.transparent,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Text(
+                          'Full 3D Badge Mode',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _scanMode == 'full_badge' ? Colors.white : const Color(0xFF94A3B8),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _scanMode = 'standalone_strip';
-                              _latestResult = null;
-                            });
-                          },
-                          borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                            decoration: BoxDecoration(
-                              color: isStandalone ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: isStandalone ? AppTheme.safetyOrange : AppTheme.borderColor,
-                                width: isStandalone ? 2 : 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.science_rounded, size: 16, color: isStandalone ? AppTheme.safetyOrange : AppTheme.textMuted),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    'Standalone H₂S Strip',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w900,
-                                      color: isStandalone ? Colors.white : AppTheme.textSecondary,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                              ],
-                            ),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _scanMode = 'standalone_strip'),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _scanMode == 'standalone_strip' ? AppTheme.safetyOrange : Colors.transparent,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Text(
+                          'Standalone Chemical Strip',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _scanMode == 'standalone_strip' ? Colors.white : const Color(0xFF94A3B8),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    !isStandalone
-                        ? '• Full 3D Prototype: Validates grey enclosure, humidity card & worker QR verification.'
-                        : '• Standalone Strip: Direct paper strip scanning with guided framing across all exposure shades.',
-                    style: const TextStyle(fontSize: 10.5, color: AppTheme.textMuted, fontStyle: FontStyle.italic),
+                    ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
 
-
-
-            // Step 1: Worker Identification & Badge Verification Card
+            // ================================================================
+            // STEP 1 CARD: Worker Identification & Badge QR (MANDATORY)
+            // ================================================================
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -737,7 +732,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             children: [
                               Icon(Icons.check, size: 12, color: AppTheme.safeGreen),
                               SizedBox(width: 3),
-                              Text('LINKED', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Color(0xFF065F46))),
+                              Text('VERIFIED', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Color(0xFF065F46))),
                             ],
                           ),
                         ),
@@ -769,14 +764,14 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   ],
                   const SizedBox(height: 12),
 
-                  // Camera QR Scan and Upload QR File options
+                  // Camera QR Scan and Upload QR Badge Buttons
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
                           icon: const Icon(Icons.camera_alt_rounded, size: 18, color: AppTheme.safetyOrange),
                           label: const Text('Camera QR Scan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
-                          onPressed: () => _verifyWorkerQr(ImageSource.camera),
+                          onPressed: _isQrProcessing ? null : () => _pickQrImage(ImageSource.camera),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppTheme.borderColor),
                             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -790,7 +785,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         child: OutlinedButton.icon(
                           icon: const Icon(Icons.photo_library_rounded, size: 18, color: Color(0xFF0284C7)),
                           label: const Text('Upload QR Badge', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
-                          onPressed: () => _verifyWorkerQr(ImageSource.gallery),
+                          onPressed: _isQrProcessing ? null : () => _pickQrImage(ImageSource.gallery),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppTheme.borderColor),
                             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -802,8 +797,23 @@ class _ScannerScreenState extends State<ScannerScreen> {
                     ],
                   ),
 
+                  if (_isQrProcessing) ...[
+                    const SizedBox(height: 12),
+                    const Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                          SizedBox(width: 10),
+                          Text('Decoding & verifying worker QR badge...', style: TextStyle(fontSize: 11, color: AppTheme.textMuted, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   const SizedBox(height: 12),
 
+                  // Verified Personnel Dossier Card (Step 1 Only)
                   if (_identifiedWorker != null) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -819,44 +829,65 @@ class _ScannerScreenState extends State<ScannerScreen> {
                           ),
                         ],
                       ),
-                      child: Row(
+                      child: Column(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF065F46),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 18),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${_identifiedWorker!.name} (${_identifiedWorker!.workerId})',
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF065F46),
+                                  shape: BoxShape.circle,
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Badge: ${_identifiedWorker!.effectiveBadgeId} • ${_identifiedWorker!.status.toUpperCase()} • ${_identifiedWorker!.department}',
-                                  style: const TextStyle(fontSize: 11, color: Color(0xFF34D399), fontWeight: FontWeight.w700),
+                                child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 18),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${_identifiedWorker!.name} (${_identifiedWorker!.workerId})',
+                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Badge: ${_identifiedWorker!.effectiveBadgeId} • ${_identifiedWorker!.status.toUpperCase()} • ${_identifiedWorker!.department}',
+                                      style: const TextStyle(fontSize: 11, color: Color(0xFF34D399), fontWeight: FontWeight.w700),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 18),
+                                tooltip: 'Unlink / Clear Worker',
+                                onPressed: _unlinkWorker,
+                              ),
+                            ],
+                          ),
+                          if (_qrImageBytes != null) ...[
+                            const SizedBox(height: 10),
+                            const Divider(color: Color(0xFF334155), height: 1),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Image.memory(_qrImageBytes!, width: 44, height: 44, fit: BoxFit.cover),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('✓ Official QR Badge Image Attached', style: TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.w800)),
+                                      Text(_qrFileName ?? 'badge_qr.png', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5), overflow: TextOverflow.ellipsis),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 18),
-                            tooltip: 'Unlink / Clear Worker',
-                            onPressed: () {
-                              setState(() {
-                                _identifiedWorker = null;
-                                _isWorkerIdentified = false;
-                                _isQrVerified = false;
-                              });
-                            },
-                          ),
+                          ],
                         ],
                       ),
                     ),
@@ -891,15 +922,17 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Step 2: Capture Dosimeter Strip Photo Card
+            // ================================================================
+            // STEP 2 CARD: Capture Physical Sensor Strip / Prototype Photo
+            // ================================================================
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _imageBytes != null ? AppTheme.safetyOrange.withValues(alpha: 0.6) : AppTheme.borderColor,
-                  width: _imageBytes != null ? 1.5 : 1.0,
+                  color: _sensorImageBytes != null ? AppTheme.safetyOrange.withValues(alpha: 0.6) : AppTheme.borderColor,
+                  width: _sensorImageBytes != null ? 1.5 : 1.0,
                 ),
                 boxShadow: AppTheme.cardShadow,
               ),
@@ -925,7 +958,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                           maxLines: 1,
                         ),
                       ),
-                      if (_imageBytes != null) ...[
+                      if (_sensorImageBytes != null) ...[
                         const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -948,111 +981,160 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Standalone Guided Framing Overlay Box
-                  if (isStandalone && _imageBytes == null) ...[
+                  // If full badge mode and Step 1 not complete -> Show locked indicator
+                  if (!isStandalone && _identifiedWorker == null) ...[
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
+                        color: const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.safetyOrange.withValues(alpha: 0.5), width: 1.5),
+                        border: Border.all(color: AppTheme.borderColor),
                       ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: const Column(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: AppTheme.safetyOrange, width: 2),
-                              borderRadius: BorderRadius.circular(8),
-                              color: Colors.black.withValues(alpha: 0.3),
-                            ),
-                            child: const Column(
-                              children: [
-                                Text(
-                                  '┌──────────────────────────────┐',
-                                  style: TextStyle(color: AppTheme.safetyOrange, fontFamily: 'monospace', fontSize: 11),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'PLACE H2S STRIP HERE',
-                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.0),
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  '(Center 60–80% of strip inside frame)',
-                                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  '└──────────────────────────────┘',
-                                  style: TextStyle(color: AppTheme.safetyOrange, fontFamily: 'monospace', fontSize: 11),
-                                ),
-                              ],
-                            ),
+                          Icon(Icons.lock_outline_rounded, color: AppTheme.textMuted, size: 26),
+                          SizedBox(height: 6),
+                          Text(
+                            'Step 2 Locked: Please scan or select a registered Worker QR Badge in Step 1 first.',
+                            style: TextStyle(fontSize: 11.5, color: AppTheme.textSecondary, fontWeight: FontWeight.w700),
+                            textAlign: TextAlign.center,
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  // Image Acquisition Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          icon: const Icon(Icons.camera_alt_rounded, size: 18),
-                          label: Text(!isStandalone ? 'Take Badge Photo' : 'Take Strip Photo'),
-                          onPressed: () => _pickImage(ImageSource.camera),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0F172A),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
+                  ] else ...[
+                    // Standalone Guided Framing Overlay Box
+                    if (isStandalone && _sensorImageBytes == null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.safetyOrange.withValues(alpha: 0.5), width: 1.5),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: AppTheme.safetyOrange, width: 2),
+                                borderRadius: BorderRadius.circular(8),
+                                color: Colors.black.withValues(alpha: 0.3),
+                              ),
+                              child: const Column(
+                                children: [
+                                  Text(
+                                    '┌──────────────────────────────┐',
+                                    style: TextStyle(color: AppTheme.safetyOrange, fontFamily: 'monospace', fontSize: 11),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'PLACE H2S STRIP HERE',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.0),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    '(Center 60–80% of strip inside frame)',
+                                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    '└──────────────────────────────┘',
+                                    style: TextStyle(color: AppTheme.safetyOrange, fontFamily: 'monospace', fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          icon: const Icon(Icons.file_upload_outlined, color: AppTheme.textPrimary, size: 18),
-                          label: const Text('Upload Photo', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
-                          onPressed: () => _pickImage(ImageSource.gallery),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppTheme.borderColor),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            backgroundColor: const Color(0xFFF8FAFC),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // Image Acquisition Buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                            label: Text(!isStandalone ? 'Take Badge Photo' : 'Take Strip Photo'),
+                            onPressed: () => _pickSensorImage(ImageSource.camera),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F172A),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.file_upload_outlined, color: AppTheme.textPrimary, size: 18),
+                            label: const Text('Upload Photo', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+                            onPressed: () => _pickSensorImage(ImageSource.gallery),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: AppTheme.borderColor),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              backgroundColor: const Color(0xFFF8FAFC),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    if (_sensorImageBytes != null) ...[
+                      const SizedBox(height: 14),
+                      Stack(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppTheme.borderColor),
+                            ),
+                            child: Center(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.memory(_sensorImageBytes!, height: 160, fit: BoxFit.contain),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: CircleAvatar(
+                              radius: 14,
+                              backgroundColor: Colors.black54,
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.close, color: Colors.white, size: 16),
+                                onPressed: _clearSensorImage,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                        'No DoseBand sensor image selected. Capture or upload the physical exposure test strip.',
+                        style: TextStyle(fontSize: 10.5, color: AppTheme.textMuted, fontStyle: FontStyle.italic),
                       ),
                     ],
-                  ),
-
-                  if (_imageBytes != null) ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.borderColor),
-                      ),
-                      child: Center(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.memory(_imageBytes!, height: 160, fit: BoxFit.contain),
-                        ),
-                      ),
-                    ),
                   ],
                 ],
               ),
             ),
             const SizedBox(height: 16),
 
-            // Step 3: Analyze & Run ML Model Action Button
+            // ================================================================
+            // STEP 3 CARD: Analyze & Run Optical Model Inference
+            // ================================================================
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
@@ -1060,18 +1142,19 @@ class _ScannerScreenState extends State<ScannerScreen> {
               ),
               width: double.infinity,
               child: ElevatedButton.icon(
-                icon: _isAnalyzing
+                icon: _isSensorAnalyzing
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : const Icon(Icons.analytics_rounded, size: 20),
                 label: Text(
-                  _isAnalyzing
+                  _isSensorAnalyzing
                       ? 'Running Optical Model Inference...'
                       : (!isStandalone ? '🔬 Analyze DoseBand Prototype' : '🔬 Analyze Standalone H₂S Strip'),
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 0.3),
                 ),
-                onPressed: canAnalyze ? _analyzeStrip : null,
+                onPressed: canAnalyze ? _analyzeSensorStrip : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.safetyOrange,
+                  disabledBackgroundColor: const Color(0xFFCBD5E1),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
