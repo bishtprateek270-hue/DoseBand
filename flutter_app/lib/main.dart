@@ -94,42 +94,50 @@ class _MainNavigationState extends State<MainNavigation> {
               child: const Icon(Icons.shield_rounded, color: Colors.white, size: 19),
             ),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'DoseBand',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 19,
-                    letterSpacing: -0.6,
-                    color: AppTheme.textPrimary,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'DoseBand',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 19,
+                      letterSpacing: -0.6,
+                      color: AppTheme.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
-                ),
-                Row(
-                  children: [
-                    Container(
-                      width: 5.5,
-                      height: 5.5,
-                      decoration: const BoxDecoration(
-                        color: AppTheme.safeGreen,
-                        shape: BoxShape.circle,
+                  Row(
+                    children: [
+                      Container(
+                        width: 5.5,
+                        height: 5.5,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.safeGreen,
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'LIVE DOSIMETRY SYNC',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textMuted,
-                        letterSpacing: 0.5,
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'LIVE DOSIMETRY SYNC',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textMuted,
+                            letterSpacing: 0.5,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -283,8 +291,10 @@ class _MainNavigationState extends State<MainNavigation> {
                     )!;
                     final iconSize = 18.0 + (3.0 * t); // 18 → 21
 
+                    final isNarrowScreen = MediaQuery.of(context).size.width < 360;
+
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                      padding: EdgeInsets.symmetric(horizontal: isNarrowScreen ? 2 : 5, vertical: 5),
                       decoration: BoxDecoration(
                         color: bgColor,
                         borderRadius: BorderRadius.circular(14),
@@ -299,7 +309,7 @@ class _MainNavigationState extends State<MainNavigation> {
                               Icon(
                                 isSelected ? item.activeIcon : item.icon,
                                 color: iconColor,
-                                size: iconSize,
+                                size: isNarrowScreen ? 18.0 : iconSize,
                               ),
                               if (item.badgeCount != null && item.badgeCount! > 0)
                                 Positioned(
@@ -324,34 +334,26 @@ class _MainNavigationState extends State<MainNavigation> {
                                 ),
                             ],
                           ),
-                          // Animated label width expand/collapse
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 280),
-                            curve: Curves.easeOutCubic,
-                            child: isSelected
-                                ? Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const SizedBox(width: 5),
-                                      AnimatedOpacity(
-                                        opacity: t,
-                                        duration: const Duration(milliseconds: 200),
-                                        child: Text(
-                                          item.label,
-                                          style: const TextStyle(
-                                            color: AppTheme.safetyOrange,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: -0.2,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : const SizedBox.shrink(),
-                          ),
+                          if (isSelected && !isNarrowScreen) ...[
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: AnimatedOpacity(
+                                opacity: t,
+                                duration: const Duration(milliseconds: 200),
+                                child: Text(
+                                  item.label,
+                                  style: const TextStyle(
+                                    color: AppTheme.safetyOrange,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.2,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     );

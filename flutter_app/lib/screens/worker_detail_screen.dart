@@ -106,14 +106,25 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(w.name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+                            Text(
+                              w.name,
+                              style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w900),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                             const SizedBox(height: 2),
-                            Text('${w.workerId} • ${w.department}', style: const TextStyle(color: Color(0xFFFB923C), fontSize: 12, fontWeight: FontWeight.w800)),
+                            Text(
+                              '${w.workerId} • ${w.department}',
+                              style: const TextStyle(color: Color(0xFFFB923C), fontSize: 11.5, fontWeight: FontWeight.w800),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           ],
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: riskColor.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(999),
@@ -121,7 +132,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                         ),
                         child: Text(
                           w.isBadgeExpired ? 'EXPIRED' : (w.status != 'Active' ? w.status.toUpperCase() : 'ACTIVE'),
-                          style: TextStyle(color: riskColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                          style: TextStyle(color: riskColor, fontSize: 9.5, fontWeight: FontWeight.w900, letterSpacing: 0.4),
                         ),
                       ),
                     ],
@@ -173,14 +184,27 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                     children: [
                       Icon(Icons.bolt_rounded, color: AppTheme.safetyOrange, size: 18),
                       SizedBox(width: 6),
-                      Text('Exposure Health & Permissible Limit', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+                      Expanded(
+                        child: Text(
+                          'Exposure Health & Permissible Limit',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Cumulative H₂S Dose:', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+                      const Expanded(
+                        child: Text(
+                          'Cumulative H₂S Dose:',
+                          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       Text('${cumDose.toStringAsFixed(2)} ppm•h', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: riskColor, letterSpacing: -0.5)),
                     ],
                   ),
@@ -221,13 +245,23 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.history_rounded, color: Color(0xFF0284C7), size: 18),
-                          SizedBox(width: 6),
-                          Text('Scan Audit Trail', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
-                        ],
+                      const Expanded(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.history_rounded, color: Color(0xFF0284C7), size: 18),
+                            SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'Scan Audit Trail',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
@@ -341,7 +375,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
               QrBadgeCardWidget(worker: w),
               const SizedBox(height: 14),
               SizedBox(
-                width: 340,
+                width: double.infinity,
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.check_circle_rounded, size: 18),
                   label: const Text('Dismiss', style: TextStyle(fontWeight: FontWeight.bold)),

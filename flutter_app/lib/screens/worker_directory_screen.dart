@@ -717,6 +717,7 @@ class _WorkerTile extends StatelessWidget {
                       '${worker.workerId} · ${worker.department}',
                       style: const TextStyle(fontSize: 11.5, color: AppTheme.textMuted),
                       overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                     const SizedBox(height: 4),
                     Row(
@@ -725,15 +726,12 @@ class _WorkerTile extends StatelessWidget {
                         const SizedBox(width: 3),
                         Flexible(
                           child: Text(
-                            worker.shift,
+                            shiftEnd.isNotEmpty ? '${worker.shift} · ends $shiftEnd' : worker.shift,
                             style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
                             overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
-                        if (shiftEnd.isNotEmpty) ...[
-                          const Text(' · ends ', style: TextStyle(fontSize: 11, color: AppTheme.textFaint)),
-                          Text(shiftEnd, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.textSecondary)),
-                        ],
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -746,6 +744,7 @@ class _WorkerTile extends StatelessWidget {
                             worker.workZone.split(' - ').first,
                             style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                             overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
                       ],
@@ -759,23 +758,34 @@ class _WorkerTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
                       color: statusBg,
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: statusColor.withValues(alpha: 0.35)),
                     ),
-                    child: Text(statusLabel, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: statusColor, letterSpacing: 0.4)),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        color: statusColor,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
                     '${worker.cumulativeDose.toStringAsFixed(1)} ppm•h',
-                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: statusColor),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: statusColor,
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  const Icon(Icons.chevron_right_rounded, size: 16, color: AppTheme.textFaint),
                 ],
               ),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right_rounded, size: 18, color: AppTheme.textFaint),
             ],
           ),
         ),
@@ -811,13 +821,17 @@ class _ActionButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, size: 15, color: disabled ? AppTheme.textFaint : color),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: disabled ? AppTheme.textFaint : color,
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: disabled ? AppTheme.textFaint : color,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
             ],

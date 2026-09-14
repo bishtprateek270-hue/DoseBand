@@ -177,12 +177,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          'Audit Exposure Telemetry',
-                          style: GoogleFonts.inter(
-                            color: AppTheme.primaryNavy,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
+                        Expanded(
+                          child: Text(
+                            'Audit Exposure Telemetry',
+                            style: GoogleFonts.inter(
+                              color: AppTheme.primaryNavy,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -208,27 +211,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 4,
-                              height: 18,
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryNavy,
-                                borderRadius: BorderRadius.circular(2),
+                        Expanded(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 4,
+                                height: 18,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryNavy,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Personnel Exposure Audit',
-                              style: GoogleFonts.inter(
-                                color: AppTheme.primaryNavy,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 16,
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'Personnel Exposure Audit',
+                                  style: GoogleFonts.inter(
+                                    color: AppTheme.primaryNavy,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 16,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           '${workers.length} Total',
                           style: GoogleFonts.inter(
@@ -293,6 +303,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         fontWeight: FontWeight.w700,
                                         fontSize: 13,
                                       ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
@@ -301,6 +313,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         color: AppTheme.textSecondary,
                                         fontSize: 11,
                                       ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
                                   ],
                                 ),
@@ -349,7 +363,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Widget _buildReportStatCard(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -363,30 +377,39 @@ class _ReportsScreenState extends State<ReportsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: GoogleFonts.inter(
-                  color: AppTheme.textMuted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    color: AppTheme.textMuted,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
+              const SizedBox(width: 4),
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Icon(icon, color: color, size: 16),
+                child: Icon(icon, color: color, size: 15),
               ),
             ],
           ),
-          Text(
-            value,
-            style: GoogleFonts.inter(
-              color: AppTheme.primaryNavy,
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: GoogleFonts.inter(
+                color: AppTheme.primaryNavy,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
         ],

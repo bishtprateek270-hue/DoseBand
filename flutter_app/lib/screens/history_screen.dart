@@ -69,11 +69,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
       return matchesRisk && matchesWorker;
     }).toList();
 
-    return Container(
-      color: AppTheme.scaffoldBg,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Scaffold(
+      backgroundColor: AppTheme.scaffoldBg,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             child: Column(
@@ -175,15 +176,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       final riskBg = _getRiskBgColor(reading.riskLevel);
                       final worker = _workerService.getWorkerById(reading.workerId);
 
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
+                      return Material(
+                        color: Colors.white,
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppTheme.borderColor),
-                          boxShadow: AppTheme.cardShadow,
+                          side: const BorderSide(color: AppTheme.borderColor),
                         ),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           onTap: () {
                             if (worker != null) {
                               Navigator.push(
@@ -195,8 +195,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             }
                           },
                           leading: Container(
-                            width: 42,
-                            height: 42,
+                            width: 38,
+                            height: 38,
                             decoration: BoxDecoration(
                               color: riskBg,
                               borderRadius: BorderRadius.circular(10),
@@ -205,40 +205,35 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             child: Center(
                               child: Text(
                                 reading.workerId,
-                                style: TextStyle(color: riskColor, fontWeight: FontWeight.w900, fontSize: 11),
+                                style: TextStyle(color: riskColor, fontWeight: FontWeight.w900, fontSize: 10.5),
                               ),
                             ),
                           ),
-                          title: Row(
-                            children: [
-                              Text(
-                                '${reading.estimatedH2sPpm.toStringAsFixed(1)} ppm',
-                                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14.5, color: AppTheme.textPrimary),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '(${reading.dose.toStringAsFixed(1)} ppm·hr)',
-                                style: const TextStyle(color: AppTheme.safetyOrange, fontWeight: FontWeight.w800, fontSize: 12),
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  '• ${worker?.name ?? reading.workerId}',
-                                  style: const TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w600),
-                                  overflow: TextOverflow.ellipsis,
+                          title: Text.rich(
+                            TextSpan(
+                              text: '${reading.estimatedH2sPpm.toStringAsFixed(1)} ppm ',
+                              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: AppTheme.textPrimary),
+                              children: [
+                                TextSpan(
+                                  text: '(${reading.dose.toStringAsFixed(1)} ppm·hr) · ${worker?.name ?? reading.workerId}',
+                                  style: const TextStyle(color: AppTheme.safetyOrange, fontWeight: FontWeight.w800, fontSize: 11),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 3.0),
+                            padding: const EdgeInsets.only(top: 2.0),
                             child: Text(
-                              '${DateFormat('MMM dd, yyyy • HH:mm').format(reading.timestamp)} • ${reading.temperature.toStringAsFixed(0)}°C, ${reading.humidity.toStringAsFixed(0)}% RH • ${reading.exposureTime.toStringAsFixed(1)}h shift',
-                              style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                              '${DateFormat('MMM dd • HH:mm').format(reading.timestamp)} • ${reading.temperature.toStringAsFixed(0)}°C, ${reading.humidity.toStringAsFixed(0)}% RH • ${reading.exposureTime.toStringAsFixed(1)}h shift',
+                              style: const TextStyle(color: AppTheme.textMuted, fontSize: 10.5),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
                           trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                             decoration: BoxDecoration(
                               color: riskBg,
                               borderRadius: BorderRadius.circular(6),
@@ -248,8 +243,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               style: TextStyle(
                                 color: riskColor,
                                 fontWeight: FontWeight.w900,
-                                fontSize: 9.5,
-                                letterSpacing: 0.4,
+                                fontSize: 9,
+                                letterSpacing: 0.3,
                               ),
                             ),
                           ),
@@ -260,8 +255,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildFilterChip(String label, int count) {
     final isSelected = _selectedRiskFilter == label;

@@ -347,7 +347,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('H₂S Gas Concentration', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+                                const Expanded(child: Text('H₂S Gas Concentration', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                                const SizedBox(width: 8),
                                 Text('${r.estimatedH2sPpm.toStringAsFixed(2)} ppm', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: statusColor)),
                               ],
                             ),
@@ -357,7 +358,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('Shift Exposure Dose', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                const Expanded(child: Text('Shift Exposure Dose', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis)),
+                                const SizedBox(width: 8),
                                 Text('${r.cumulativeDosePpmH.toStringAsFixed(2)} ppm•h', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
                               ],
                             ),
@@ -365,7 +367,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('Optical Darkening', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                const Expanded(child: Text('Optical Darkening', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis)),
+                                const SizedBox(width: 8),
                                 Text('${(r.rawIntensity * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
                               ],
                             ),
@@ -373,7 +376,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('Confidence', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                const Expanded(child: Text('Confidence', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis)),
+                                const SizedBox(width: 8),
                                 Text('${r.confidencePct}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
                               ],
                             ),
@@ -1131,7 +1135,16 @@ class _InfoRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-        Flexible(child: Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary), textAlign: TextAlign.right)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+            textAlign: TextAlign.right,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        ),
       ],
     ),
   );

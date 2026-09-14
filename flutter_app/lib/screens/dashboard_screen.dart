@@ -105,9 +105,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           Icon(Icons.dashboard_customize_rounded, color: AppTheme.safetyOrange, size: 13),
                           SizedBox(width: 5),
-                          Text(
-                            'PLANT OCCUPATIONAL SAFETY CONSOLE',
-                            style: TextStyle(color: AppTheme.safetyOrange, fontSize: 9.5, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                          Flexible(
+                            child: Text(
+                              'PLANT OCCUPATIONAL SAFETY CONSOLE',
+                              style: TextStyle(color: AppTheme.safetyOrange, fontSize: 9.5, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           ),
                         ],
                       ),
@@ -116,6 +120,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const Text(
                       'Industrial Health & Safety Dashboard',
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppTheme.textPrimary, letterSpacing: -0.5),
+                      softWrap: true,
                     ),
                     const SizedBox(height: 10),
                     InkWell(
@@ -133,9 +138,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           children: [
                             Icon(Icons.assignment_turned_in_rounded, color: AppTheme.safetyOrange, size: 16),
                             SizedBox(width: 6),
-                            Text(
-                              'EXPORT OSHA / DGMS AUDIT REPORT',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: AppTheme.safetyOrange, letterSpacing: 0.3),
+                            Flexible(
+                              child: Text(
+                                'EXPORT OSHA / DGMS AUDIT REPORT',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: AppTheme.safetyOrange, letterSpacing: 0.3),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
                             ),
                             SizedBox(width: 4),
                             Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.safetyOrange, size: 10),
@@ -289,7 +298,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('📋 Dosimeter Scan History', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+                        const Expanded(
+                          child: Text(
+                            '📋 Dosimeter Scan History',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                           decoration: BoxDecoration(
@@ -355,7 +371,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -365,18 +381,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: Text(
                         title,
-                        style: const TextStyle(fontSize: 10.5, color: AppTheme.textMuted, fontWeight: FontWeight.w700),
+                        style: const TextStyle(fontSize: 9.5, color: AppTheme.textMuted, fontWeight: FontWeight.w700),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Icon(icon, color: color, size: 16),
+                    const SizedBox(width: 2),
+                    Icon(icon, color: color, size: 14),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  value,
-                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: color, letterSpacing: -0.5),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: color, letterSpacing: -0.5),
+                  ),
                 ),
               ],
             ),
@@ -404,7 +425,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Flexible(
+              Expanded(
                 child: Row(
                   children: [
                     Container(
@@ -416,7 +437,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: const Icon(Icons.bar_chart_rounded, color: AppTheme.safetyOrange, size: 18),
                     ),
                     const SizedBox(width: 10),
-                    const Flexible(
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -643,7 +664,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('$name ($wid)', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: AppTheme.textPrimary)),
+              Expanded(
+                child: Text(
+                  '$name ($wid)',
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: AppTheme.textPrimary),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
@@ -682,10 +711,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '${isExpired ? "❌ BADGE EXPIRED" : "⏳ EXPIRING SOON"}: ${alert['badge_id']}',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: color),
+              Expanded(
+                child: Text(
+                  '${isExpired ? "❌ BADGE EXPIRED" : "⏳ EXPIRING SOON"}: ${alert['badge_id']}',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: color),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${alert['days_left']}d',
                 style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: color),
@@ -869,8 +903,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-          Text(value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis)),
+          const SizedBox(width: 8),
+          Flexible(child: Text(value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.textPrimary), textAlign: TextAlign.right)),
         ],
       ),
     );

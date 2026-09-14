@@ -24,7 +24,7 @@ class QrBadgeCardWidget extends StatelessWidget {
     final isActive = worker.status == 'Active' && !isExpired;
 
     return Container(
-      width: width,
+      constraints: BoxConstraints(maxWidth: width),
       decoration: BoxDecoration(
         color: const Color(0xFF0F172A), // Dark navy industrial chassis
         borderRadius: BorderRadius.circular(16),
@@ -225,15 +225,20 @@ class QrBadgeCardWidget extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  isActive ? 'STATUS: ACTIVE • VERIFIED' : 'STATUS: EXPIRED / INACTIVE',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.5,
+                Expanded(
+                  child: Text(
+                    isActive ? 'STATUS: ACTIVE • VERIFIED' : 'STATUS: EXPIRED / INACTIVE',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
+                const SizedBox(width: 6),
                 const Icon(Icons.verified_user_rounded, color: Colors.white, size: 14),
               ],
             ),

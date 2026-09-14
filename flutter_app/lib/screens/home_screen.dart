@@ -168,85 +168,176 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.safeGreen.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(8),
+                                Flexible(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.safeGreen.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.shield_outlined, color: AppTheme.safeGreen, size: 14),
+                                        SizedBox(width: 4),
+                                        Flexible(
+                                          child: Text(
+                                            'FACILITY SAFETY INDEX: 98.5%',
+                                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppTheme.safeGreen, letterSpacing: 0.3),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.shield_outlined, color: AppTheme.safeGreen, size: 14),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'FACILITY SAFETY INDEX: 98.5%',
-                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppTheme.safeGreen, letterSpacing: 0.3),
+                                ),
+                                const SizedBox(width: 8),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    AnimatedBuilder(
+                                      animation: _pulseAnimation,
+                                      builder: (context, child) => Transform.scale(
+                                        scale: 0.9 + (_pulseAnimation.value * 0.15),
+                                        child: const Icon(Icons.bolt, color: AppTheme.safetyOrange, size: 16),
                                       ),
-                                    ],
-                                  ),
-                                ),
-                                const Spacer(),
-                                AnimatedBuilder(
-                                  animation: _pulseAnimation,
-                                  builder: (context, child) => Transform.scale(
-                                    scale: 0.9 + (_pulseAnimation.value * 0.15),
-                                    child: const Icon(Icons.bolt, color: AppTheme.safetyOrange, size: 18),
-                                  ),
-                                ),
-                                const SizedBox(width: 2),
-                                const Text(
-                                  'LIVE OLS MATRIX',
-                                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: AppTheme.safetyOrange, letterSpacing: 0.4),
+                                    ),
+                                    const SizedBox(width: 2),
+                                    const Text(
+                                      'LIVE OLS MATRIX',
+                                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: AppTheme.safetyOrange, letterSpacing: 0.4),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
                             const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                if (constraints.maxWidth < 310) {
+                                  // 2-row layout for very narrow devices
+                                  return Column(
                                     children: [
-                                      const Text('SHIFT HAZARD STATUS', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted)),
-                                      const SizedBox(height: 4),
                                       Row(
                                         children: [
-                                          Container(
-                                            width: 10,
-                                            height: 10,
-                                            decoration: const BoxDecoration(color: AppTheme.safeGreen, shape: BoxShape.circle),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const Text('SHIFT HAZARD STATUS', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted)),
+                                                const SizedBox(height: 4),
+                                                Row(
+                                                  children: [
+                                                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.safeGreen, shape: BoxShape.circle)),
+                                                    const SizedBox(width: 5),
+                                                    const Flexible(child: Text('NOMINAL (SAFE)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: AppTheme.textPrimary), overflow: TextOverflow.ellipsis)),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                          const SizedBox(width: 6),
-                                          const Text('NOMINAL (SAFE)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      const Divider(height: 1, color: AppTheme.borderColor),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const Text('STEL CEILING', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted)),
+                                                const SizedBox(height: 4),
+                                                const Text('15.0 PPM', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppTheme.safetyOrange)),
+                                              ],
+                                            ),
+                                          ),
+                                          Container(width: 1, height: 28, color: AppTheme.borderColor),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.end,
+                                              children: [
+                                                const Text('8-HR TWA LIMIT', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted)),
+                                                const SizedBox(height: 4),
+                                                const Text('10.0 PPM', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+                                              ],
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ],
-                                  ),
-                                ),
-                                Container(width: 1, height: 32, color: AppTheme.borderColor),
-                                Expanded(
-                                  child: Column(
-                                    children: [
-                                      const Text('STEL CEILING', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted)),
-                                      const SizedBox(height: 4),
-                                      const Text('15.0 PPM', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppTheme.safetyOrange)),
-                                    ],
-                                  ),
-                                ),
-                                Container(width: 1, height: 32, color: AppTheme.borderColor),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      const Text('8-HR TWA LIMIT', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted)),
-                                      const SizedBox(height: 4),
-                                      const Text('10.0 PPM', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                                  );
+                                }
+
+                                return Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 4,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text('SHIFT HAZARD STATUS', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Container(
+                                                width: 8,
+                                                height: 8,
+                                                decoration: const BoxDecoration(color: AppTheme.safeGreen, shape: BoxShape.circle),
+                                              ),
+                                              const SizedBox(width: 5),
+                                              const Expanded(
+                                                child: FittedBox(
+                                                  fit: BoxFit.scaleDown,
+                                                  alignment: Alignment.centerLeft,
+                                                  child: Text(
+                                                    'NOMINAL (SAFE)',
+                                                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(width: 1, height: 32, color: AppTheme.borderColor, margin: const EdgeInsets.symmetric(horizontal: 4)),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Column(
+                                        children: [
+                                          const Text('STEL CEILING', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                          const SizedBox(height: 4),
+                                          const FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Text('15.0 PPM', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppTheme.safetyOrange)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(width: 1, height: 32, color: AppTheme.borderColor, margin: const EdgeInsets.symmetric(horizontal: 4)),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          const Text('8-HR TWA LIMIT', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.textMuted), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                          const SizedBox(height: 4),
+                                          const FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerRight,
+                                            child: Text('10.0 PPM', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -263,30 +354,60 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     const SizedBox(height: 12),
                     _AnimatedEntry(
                       delay: 500,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _InteractiveActionCard(
-                              icon: Icons.camera_alt_rounded,
-                              title: 'Scan Strip',
-                              badge: 'CAMERA / QR',
-                              subtitle: 'Colorimetric optical gas analysis',
-                              accentColor: AppTheme.safetyOrange,
-                              onTap: () => widget.onNavigate(1),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _InteractiveActionCard(
-                              icon: Icons.badge_outlined,
-                              title: 'Worker Registry',
-                              badge: 'PERSONNEL',
-                              subtitle: 'Badges & active dosimetry roster',
-                              accentColor: const Color(0xFF0284C7),
-                              onTap: () => widget.onNavigate(2),
-                            ),
-                          ),
-                        ],
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          if (constraints.maxWidth < 280) {
+                            // Stack cards vertically on extreme narrow constraints
+                            return Column(
+                              children: [
+                                _InteractiveActionCard(
+                                  icon: Icons.camera_alt_rounded,
+                                  title: 'Scan Strip',
+                                  badge: 'CAMERA / QR',
+                                  subtitle: 'Colorimetric optical gas analysis',
+                                  accentColor: AppTheme.safetyOrange,
+                                  isFullWidth: true,
+                                  onTap: () => widget.onNavigate(1),
+                                ),
+                                const SizedBox(height: 12),
+                                _InteractiveActionCard(
+                                  icon: Icons.badge_outlined,
+                                  title: 'Worker Registry',
+                                  badge: 'PERSONNEL',
+                                  subtitle: 'Badges & active dosimetry roster',
+                                  accentColor: const Color(0xFF0284C7),
+                                  isFullWidth: true,
+                                  onTap: () => widget.onNavigate(2),
+                                ),
+                              ],
+                            );
+                          }
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: _InteractiveActionCard(
+                                  icon: Icons.camera_alt_rounded,
+                                  title: 'Scan Strip',
+                                  badge: 'CAMERA / QR',
+                                  subtitle: 'Colorimetric optical gas analysis',
+                                  accentColor: AppTheme.safetyOrange,
+                                  onTap: () => widget.onNavigate(1),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _InteractiveActionCard(
+                                  icon: Icons.badge_outlined,
+                                  title: 'Worker Registry',
+                                  badge: 'PERSONNEL',
+                                  subtitle: 'Badges & active dosimetry roster',
+                                  accentColor: const Color(0xFF0284C7),
+                                  onTap: () => widget.onNavigate(2),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -410,30 +531,37 @@ class _InteractiveActionCardState extends State<_InteractiveActionCard> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: widget.accentColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(widget.icon, color: widget.accentColor, size: 22),
+                    child: Icon(widget.icon, color: widget.accentColor, size: 20),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      widget.badge,
-                      style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: widget.accentColor, letterSpacing: 0.4),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        widget.badge,
+                        style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: widget.accentColor, letterSpacing: 0.3),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               Text(
                 widget.title,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 6),
               Text(
