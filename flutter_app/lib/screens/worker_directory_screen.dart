@@ -193,21 +193,21 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> {
                     label: 'Register',
                     icon: Icons.person_add_alt_1_rounded,
                     color: AppTheme.safetyOrange,
-                    onTap: () => _showRegisterSheet(context),
+                    onTap: () => _showRegisterSheet(),
                   ),
                   const SizedBox(width: 8),
                   _ActionButton(
                     label: 'Edit',
                     icon: Icons.edit_outlined,
                     color: const Color(0xFF0284C7),
-                    onTap: workers.isEmpty ? null : () => _showEditSheet(context, workers),
+                    onTap: workers.isEmpty ? null : () => _showEditSheet(workers),
                   ),
                   const SizedBox(width: 8),
                   _ActionButton(
                     label: 'Delete',
                     icon: Icons.delete_outline_rounded,
                     color: AppTheme.unsafeRed,
-                    onTap: workers.isEmpty ? null : () => _showDeleteSheet(context, workers),
+                    onTap: workers.isEmpty ? null : () => _showDeleteSheet(workers),
                   ),
                 ],
               ),
@@ -240,7 +240,7 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> {
                     : ListView.separated(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (context, i) => _WorkerTile(
                           worker: filtered[i],
                           onTap: () => Navigator.push(
@@ -260,7 +260,7 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> {
   // ─────────────────────────────────────────────
   // REGISTER BOTTOM SHEET
   // ─────────────────────────────────────────────
-  void _showRegisterSheet(BuildContext context) {
+  void _showRegisterSheet() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -339,18 +339,17 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> {
                       );
                       final ok = await _workerService.addWorker(newWorker);
                       setSheet(() => _isRegistering = false);
-                      if (mounted) {
-                        Navigator.pop(context);
-                        _regIdController.clear();
-                        _regNameController.clear();
-                        _regBadgeController.clear();
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(ok ? '✅ ${newWorker.name} registered!' : '❌ Failed. Check duplicate IDs.'),
-                          backgroundColor: ok ? AppTheme.safeGreen : AppTheme.unsafeRed,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ));
-                      }
+                      if (!mounted) return;
+                      Navigator.pop(context);
+                      _regIdController.clear();
+                      _regNameController.clear();
+                      _regBadgeController.clear();
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(ok ? '✅ ${newWorker.name} registered!' : '❌ Failed. Check duplicate IDs.'),
+                        backgroundColor: ok ? AppTheme.safeGreen : AppTheme.unsafeRed,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ));
                     },
                     child: _isRegistering
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
@@ -368,7 +367,7 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> {
   // ─────────────────────────────────────────────
   // EDIT BOTTOM SHEET
   // ─────────────────────────────────────────────
-  void _showEditSheet(BuildContext context, List<Worker> workers) {
+  void _showEditSheet(List<Worker> workers) {
     if (_editSelectedWorker == null) _populateEditForm(workers.first);
     showModalBottomSheet(
       context: context,
@@ -459,15 +458,14 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> {
                       );
                       final ok = await _workerService.updateWorker(updated);
                       setSheet(() => _isEditing = false);
-                      if (mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(ok ? '✅ ${updated.name} updated!' : '❌ Failed to update.'),
-                          backgroundColor: ok ? AppTheme.safeGreen : AppTheme.unsafeRed,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ));
-                      }
+                      if (!mounted) return;
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(ok ? '✅ ${updated.name} updated!' : '❌ Failed to update.'),
+                        backgroundColor: ok ? AppTheme.safeGreen : AppTheme.unsafeRed,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ));
                     },
                     child: _isEditing
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
@@ -485,8 +483,8 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> {
   // ─────────────────────────────────────────────
   // DELETE BOTTOM SHEET
   // ─────────────────────────────────────────────
-  void _showDeleteSheet(BuildContext context, List<Worker> workers) {
-    if (_delSelectedWorker == null) _delSelectedWorker = workers.first;
+  void _showDeleteSheet(List<Worker> workers) {
+    _delSelectedWorker ??= workers.first;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -506,10 +504,12 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> {
                 items: workers.map((w) => '${w.workerId} — ${w.name}').toList(),
                 rawItems: workers.map((w) => w.workerId).toList(),
                 onChanged: (v) {
-                  if (v != null) setSheet(() {
-                    _delSelectedWorker = workers.firstWhere((x) => x.workerId == v);
-                    _confirmDelete = false;
-                  });
+                  if (v != null) {
+                    setSheet(() {
+                      _delSelectedWorker = workers.firstWhere((x) => x.workerId == v);
+                      _confirmDelete = false;
+                    });
+                  }
                 },
               ),
               const SizedBox(height: 12),
@@ -559,15 +559,14 @@ class _WorkerDirectoryScreenState extends State<WorkerDirectoryScreen> {
                     setSheet(() => _isDeleting = true);
                     final ok = await _workerService.deleteWorker(selected.workerId);
                     setSheet(() { _isDeleting = false; _confirmDelete = false; _delSelectedWorker = null; });
-                    if (mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(ok ? '✅ ${selected.name} deleted.' : '❌ Failed to delete.'),
-                        backgroundColor: ok ? AppTheme.safeGreen : AppTheme.unsafeRed,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ));
-                    }
+                    if (!mounted) return;
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(ok ? '✅ ${selected.name} deleted.' : '❌ Failed to delete.'),
+                      backgroundColor: ok ? AppTheme.safeGreen : AppTheme.unsafeRed,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ));
                   } : null,
                   child: _isDeleting
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
@@ -875,7 +874,7 @@ class _SheetDropdown extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
-        value: values.contains(value) ? value : values.first,
+        initialValue: values.contains(value) ? value : values.first,
         decoration: InputDecoration(
           labelText: label,
           filled: true,

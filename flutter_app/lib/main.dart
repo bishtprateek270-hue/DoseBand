@@ -218,7 +218,7 @@ class _MainNavigationState extends State<MainNavigation> {
         layoutBuilder: (currentChild, previousChildren) => Stack(
           children: [
             ...previousChildren,
-            if (currentChild != null) currentChild,
+            ?currentChild,
           ],
         ),
         child: KeyedSubtree(

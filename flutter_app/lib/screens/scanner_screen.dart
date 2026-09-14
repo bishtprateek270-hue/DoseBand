@@ -125,7 +125,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         controller: controller,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         itemCount: workers.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (ctx, idx) {
                           final w = workers[idx];
                           return _WorkerCatalogTile(
@@ -1038,8 +1038,11 @@ class _WorkerCatalogTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color statusColor = AppTheme.safeGreen;
-    if (worker.isBadgeExpired || worker.status != 'Active') statusColor = AppTheme.unsafeRed;
-    else if (worker.cumulativeDose >= 10) statusColor = AppTheme.cautionYellow;
+    if (worker.isBadgeExpired || worker.status != 'Active') {
+      statusColor = AppTheme.unsafeRed;
+    } else if (worker.cumulativeDose >= 10) {
+      statusColor = AppTheme.cautionYellow;
+    }
 
     return GestureDetector(
       onTap: onSelect,
