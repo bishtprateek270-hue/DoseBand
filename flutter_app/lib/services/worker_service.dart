@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/worker.dart';
 import '../models/reading.dart';
 import 'api_service.dart';
@@ -7,16 +8,21 @@ import 'api_service.dart';
 /// Worker & Dosimetry State Management Service.
 ///
 /// Automatically synchronizes with the Python FastAPI backend and SQLite database (doseband.db).
-/// Maintains seamless offline fallback with local state caching.
+/// Maintains seamless offline fallback with permanent SharedPreferences local state caching.
 class WorkerService extends ChangeNotifier {
   static final WorkerService _instance = WorkerService._internal();
   factory WorkerService() => _instance;
 
   final ApiService _apiService = ApiService();
 
+  static const String _storageKeyWorkers = 'doseband_persisted_workers_v1';
+  static const String _storageKeyReadings = 'doseband_persisted_readings_v1';
+
   WorkerService._internal() {
     _initSeedData();
-    refreshFromBackend();
+    _loadLocalData().then((_) {
+      refreshFromBackend();
+    });
   }
 
   final List<Worker> _workers = [];
@@ -36,6 +42,50 @@ class WorkerService extends ChangeNotifier {
   int get unsafeWorkersCount => _workers.where((w) => w.riskLevel.toLowerCase() == 'unsafe').length;
   int get expiredBadgesCount => _workers.where((w) => w.isBadgeExpired).length;
 
+  Future<void> _loadLocalData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final workersJson = prefs.getString(_storageKeyWorkers);
+      if (workersJson != null && workersJson.isNotEmpty) {
+        final List decoded = jsonDecode(workersJson);
+        if (decoded.isNotEmpty) {
+          final List<Worker> loaded = decoded.map((m) => Worker.fromMap(m as Map<String, dynamic>)).toList();
+          for (final w in loaded) {
+            _workers.removeWhere((existing) => existing.workerId.toUpperCase() == w.workerId.toUpperCase());
+            _workers.add(w);
+          }
+        }
+      }
+
+      final readingsJson = prefs.getString(_storageKeyReadings);
+      if (readingsJson != null && readingsJson.isNotEmpty) {
+        final List decoded = jsonDecode(readingsJson);
+        if (decoded.isNotEmpty) {
+          _readings.clear();
+          for (final m in decoded) {
+            _readings.add(Reading.fromMap(m as Map<String, dynamic>));
+          }
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[WorkerService] SharedPreferences load note: $e');
+    }
+  }
+
+  Future<void> _saveLocalData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final workersList = _workers.map((w) => w.toMap()).toList();
+      await prefs.setString(_storageKeyWorkers, jsonEncode(workersList));
+
+      final readingsList = _readings.map((r) => r.toMap()).toList();
+      await prefs.setString(_storageKeyReadings, jsonEncode(readingsList));
+    } catch (e) {
+      if (kDebugMode) debugPrint('[WorkerService] SharedPreferences save note: $e');
+    }
+  }
+
   /// Fetches latest workers, sensor readings, and aggregated dashboard analytics from Python backend
   Future<void> fetchWorkers() => refreshFromBackend();
 
@@ -53,6 +103,7 @@ class WorkerService extends ChangeNotifier {
           for (final wm in workerMaps) {
             _workers.add(Worker.fromMap(wm));
           }
+          await _saveLocalData();
         }
 
         // Fetch sensor readings from SQLite
@@ -62,6 +113,7 @@ class WorkerService extends ChangeNotifier {
           for (final rm in readingMaps) {
             _readings.add(Reading.fromMap(rm));
           }
+          await _saveLocalData();
         }
 
         // Fetch dashboard analytics
@@ -490,6 +542,7 @@ class WorkerService extends ChangeNotifier {
     final newWorker = worker ?? Worker.fromMap(workerMap);
     _workers.removeWhere((w) => w.workerId == effectiveWorkerId);
     _workers.add(newWorker);
+    await _saveLocalData();
     notifyListeners();
     return true;
   }
@@ -546,6 +599,7 @@ class WorkerService extends ChangeNotifier {
         badgeExpiryDate: effectiveExpiry.isNotEmpty ? effectiveExpiry : _workers[index].badgeExpiryDate,
         status: effectiveStatus,
       );
+      await _saveLocalData();
       notifyListeners();
       return true;
     }
@@ -561,6 +615,7 @@ class WorkerService extends ChangeNotifier {
 
     _workers.removeWhere((w) => w.workerId == workerId);
     _readings.removeWhere((r) => r.workerId == workerId);
+    await _saveLocalData();
     notifyListeners();
     return true;
   }
@@ -645,6 +700,7 @@ class WorkerService extends ChangeNotifier {
       );
     }
 
+    await _saveLocalData();
     notifyListeners();
   }
 }

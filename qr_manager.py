@@ -53,7 +53,8 @@ def generate_badge_qr_png(
     worker_id: str,
     badge_id: str,
     box_size: int = 10,
-    border: int = 2
+    border: int = 2,
+    qr_payload: Optional[str] = None
 ) -> bytes:
     """
     Generates a raw QR code PNG image as bytes using canonical DoseBand format.
@@ -63,11 +64,16 @@ def generate_badge_qr_png(
         badge_id (str): Unique badge identifier (e.g., 'BDG-101').
         box_size (int): Size of each QR pixel box.
         border (int): Border margin in boxes.
+        qr_payload (str, optional): Pre-stored permanent QR payload.
 
     Returns:
         bytes: PNG encoded image bytes.
     """
-    payload = generate_qr_payload(worker_id, badge_id)
+    if not qr_payload or not str(qr_payload).strip():
+        payload = generate_qr_payload(worker_id, badge_id)
+    else:
+        payload = str(qr_payload).strip()
+
     qr = qrcode.QRCode(
         version=None,
         error_correction=qrcode.constants.ERROR_CORRECT_M,
@@ -91,7 +97,7 @@ def generate_styled_badge_card(
     Generates a branded, printable industrial ID badge card with embedded QR code.
 
     Args:
-        worker_profile (dict): Dictionary with worker fields (worker_id, name, department, work_zone, shift, badge_id, badge_expiry_date, status).
+        worker_profile (dict): Dictionary with worker fields (worker_id, name, department, work_zone, shift, badge_id, badge_expiry_date, status, qr_payload).
         output_size (tuple): Width and height of the badge card in pixels.
 
     Returns:
@@ -114,7 +120,8 @@ def generate_styled_badge_card(
         worker_id=str(worker_profile.get("worker_id", "")),
         badge_id=str(worker_profile.get("badge_id", "")),
         box_size=7,
-        border=1
+        border=1,
+        qr_payload=str(worker_profile.get("qr_payload", "")) if worker_profile.get("qr_payload") else None
     )
     qr_img = Image.open(io.BytesIO(qr_bytes)).convert("RGB")
     qr_size = 210

@@ -103,7 +103,8 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             badge_id TEXT UNIQUE NOT NULL,
             badge_issue_date TEXT NOT NULL,
             badge_expiry_date TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'Active'
+            status TEXT NOT NULL DEFAULT 'Active',
+            qr_payload TEXT NOT NULL DEFAULT ''
         );
         """
     )
@@ -116,32 +117,34 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
         ("badge_id", "TEXT DEFAULT ''"),
         ("badge_issue_date", "TEXT DEFAULT ''"),
         ("badge_expiry_date", "TEXT DEFAULT ''"),
-        ("status", "TEXT DEFAULT 'Active'")
+        ("status", "TEXT DEFAULT 'Active'"),
+        ("qr_payload", "TEXT DEFAULT ''")
     ]
     for col_name, col_type in worker_migration_cols:
         if col_name not in existing_worker_cols:
             cursor.execute(f"ALTER TABLE workers ADD COLUMN {col_name} {col_type};")
 
-    # Update any workers where badge_id or dates are empty
+    # Update any workers where badge_id, dates, or qr_payload are empty
     today = date.today()
     issue_date_str = (today - timedelta(days=30)).isoformat()
     expiry_date_str = (today + timedelta(days=60)).isoformat()
 
-    cursor.execute("SELECT worker_id, badge_id, work_zone, badge_issue_date, badge_expiry_date FROM workers;")
-    for w_code, b_id, w_zone, b_issue, b_exp in cursor.fetchall():
+    cursor.execute("SELECT worker_id, badge_id, work_zone, badge_issue_date, badge_expiry_date, qr_payload FROM workers;")
+    for w_code, b_id, w_zone, b_issue, b_exp, q_pay in cursor.fetchall():
         new_bid = b_id if b_id else f"BDG-{str(w_code).replace('W-', '')}"
         new_zone = w_zone if w_zone and w_zone != '' else "Zone A - General Area"
         new_issue = b_issue if b_issue and b_issue != '' else issue_date_str
         new_exp = b_exp if b_exp and b_exp != '' else expiry_date_str
+        new_qpay = q_pay if q_pay and str(q_pay).strip() != '' else f'{{"type":"doseband_worker","version":1,"worker_id":"{str(w_code).strip()}","badge_id":"{str(new_bid).strip()}"}}'
 
-        if not b_id or not b_issue or not b_exp or not w_zone:
+        if not b_id or not b_issue or not b_exp or not w_zone or not q_pay:
             cursor.execute(
                 """
                 UPDATE workers
-                SET badge_id = ?, work_zone = ?, badge_issue_date = ?, badge_expiry_date = ?
+                SET badge_id = ?, work_zone = ?, badge_issue_date = ?, badge_expiry_date = ?, qr_payload = ?
                 WHERE worker_id = ?;
                 """,
-                (new_bid, new_zone, new_issue, new_exp, w_code)
+                (new_bid, new_zone, new_issue, new_exp, new_qpay, w_code)
             )
 
     conn.commit()
@@ -175,7 +178,8 @@ def seed_default_workers_cursor(cursor: sqlite3.Cursor) -> None:
             "BDG-101",
             issue_date_str,
             expiry_date_str,
-            "Active"
+            "Active",
+            '{"type":"doseband_worker","version":1,"worker_id":"W-101","badge_id":"BDG-101"}'
         ),
         (
             "W-102",
@@ -186,7 +190,8 @@ def seed_default_workers_cursor(cursor: sqlite3.Cursor) -> None:
             "BDG-102",
             issue_date_str,
             expiry_date_str,
-            "Active"
+            "Active",
+            '{"type":"doseband_worker","version":1,"worker_id":"W-102","badge_id":"BDG-102"}'
         ),
         (
             "W-103",
@@ -197,7 +202,8 @@ def seed_default_workers_cursor(cursor: sqlite3.Cursor) -> None:
             "BDG-103",
             issue_date_str,
             expiring_soon_str,
-            "Active"
+            "Active",
+            '{"type":"doseband_worker","version":1,"worker_id":"W-103","badge_id":"BDG-103"}'
         ),
         (
             "W-104",
@@ -208,7 +214,8 @@ def seed_default_workers_cursor(cursor: sqlite3.Cursor) -> None:
             "BDG-104",
             issue_date_str,
             expiry_date_str,
-            "Active"
+            "Active",
+            '{"type":"doseband_worker","version":1,"worker_id":"W-104","badge_id":"BDG-104"}'
         ),
         (
             "W-105",
@@ -219,15 +226,16 @@ def seed_default_workers_cursor(cursor: sqlite3.Cursor) -> None:
             "BDG-105",
             issue_date_str,
             expiry_date_str,
-            "Active"
+            "Active",
+            '{"type":"doseband_worker","version":1,"worker_id":"W-105","badge_id":"BDG-105"}'
         ),
     ]
 
     cursor.executemany(
         """
         INSERT OR IGNORE INTO workers (
-            worker_id, name, department, work_zone, shift, badge_id, badge_issue_date, badge_expiry_date, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            worker_id, name, department, work_zone, shift, badge_id, badge_issue_date, badge_expiry_date, status, qr_payload
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         sample_workers
     )
@@ -279,10 +287,11 @@ def insert_worker(
     badge_issue_date: str,
     badge_expiry_date: str,
     status: str = "Active",
+    qr_payload: Optional[str] = None,
     db_path: str = DEFAULT_DB_PATH
 ) -> int:
     """
-    Inserts a new worker into the database.
+    Inserts a new worker into the database with permanent QR payload.
 
     Args:
         worker_id (str): Unique worker identification code (e.g., 'W-106').
@@ -294,6 +303,7 @@ def insert_worker(
         badge_issue_date (str): Date badge was issued (YYYY-MM-DD).
         badge_expiry_date (str): Date badge expires (YYYY-MM-DD).
         status (str): Current worker status ('Active', 'Inactive', 'On Leave').
+        qr_payload (str, optional): Permanent canonical QR payload string.
         db_path (str): Database file path.
 
     Returns:
@@ -305,25 +315,31 @@ def insert_worker(
     if not os.path.exists(db_path):
         init_db(db_path)
 
+    clean_wid = str(worker_id).strip()
+    clean_bid = str(badge_id).strip()
+    if not qr_payload or not str(qr_payload).strip():
+        qr_payload = f'{{"type":"doseband_worker","version":1,"worker_id":"{clean_wid}","badge_id":"{clean_bid}"}}'
+
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     cursor.execute(
         """
         INSERT INTO workers (
-            worker_id, name, department, work_zone, shift, badge_id, badge_issue_date, badge_expiry_date, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            worker_id, name, department, work_zone, shift, badge_id, badge_issue_date, badge_expiry_date, status, qr_payload
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         (
-            str(worker_id).strip(),
+            clean_wid,
             str(name).strip(),
             str(department).strip(),
             str(work_zone).strip(),
             str(shift).strip(),
-            str(badge_id).strip(),
+            clean_bid,
             str(badge_issue_date).strip(),
             str(badge_expiry_date).strip(),
-            str(status).strip()
+            str(status).strip(),
+            str(qr_payload).strip()
         )
     )
 
@@ -343,10 +359,11 @@ def update_worker(
     badge_issue_date: str,
     badge_expiry_date: str,
     status: str,
+    qr_payload: Optional[str] = None,
     db_path: str = DEFAULT_DB_PATH
 ) -> bool:
     """
-    Updates an existing worker profile by worker_id.
+    Updates an existing worker profile by worker_id and updates QR payload if badge changes.
 
     Args:
         worker_id (str): Unique worker identifier.
@@ -358,6 +375,7 @@ def update_worker(
         badge_issue_date (str): Badge issue date.
         badge_expiry_date (str): Badge expiry date.
         status (str): Status ('Active', 'Inactive', 'On Leave').
+        qr_payload (str, optional): Updated QR payload.
         db_path (str): Database file path.
 
     Returns:
@@ -368,6 +386,11 @@ def update_worker(
     """
     if not os.path.exists(db_path):
         init_db(db_path)
+
+    clean_wid = str(worker_id).strip()
+    clean_bid = str(badge_id).strip()
+    if not qr_payload or not str(qr_payload).strip():
+        qr_payload = f'{{"type":"doseband_worker","version":1,"worker_id":"{clean_wid}","badge_id":"{clean_bid}"}}'
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -382,7 +405,8 @@ def update_worker(
             badge_id = ?,
             badge_issue_date = ?,
             badge_expiry_date = ?,
-            status = ?
+            status = ?,
+            qr_payload = ?
         WHERE worker_id = ?;
         """,
         (
@@ -390,11 +414,12 @@ def update_worker(
             str(department).strip(),
             str(work_zone).strip(),
             str(shift).strip(),
-            str(badge_id).strip(),
+            clean_bid,
             str(badge_issue_date).strip(),
             str(badge_expiry_date).strip(),
             str(status).strip(),
-            str(worker_id).strip()
+            str(qr_payload).strip(),
+            clean_wid
         )
     )
 

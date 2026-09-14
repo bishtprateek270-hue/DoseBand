@@ -15,6 +15,7 @@ class Worker {
   final String riskLevel;
   final bool isBadgeExpired;
   final DateTime? lastScanTime;
+  final String qrPayload;
 
   Worker({
     required this.workerId,
@@ -31,9 +32,20 @@ class Worker {
     this.riskLevel = 'Safe',
     this.isBadgeExpired = false,
     this.lastScanTime,
+    this.qrPayload = '',
   });
 
   String get effectiveBadgeId => badgeId.isNotEmpty ? badgeId : 'BDG-${workerId.replaceAll('W-', '')}';
+
+  String get effectiveQrPayload {
+    if (qrPayload.isNotEmpty) return qrPayload;
+    return jsonEncode({
+      'type': 'doseband_worker',
+      'version': 1,
+      'worker_id': workerId,
+      'badge_id': effectiveBadgeId,
+    });
+  }
 
   Worker copyWith({
     String? workerId,
@@ -50,6 +62,7 @@ class Worker {
     String? riskLevel,
     bool? isBadgeExpired,
     DateTime? lastScanTime,
+    String? qrPayload,
   }) {
     return Worker(
       workerId: workerId ?? this.workerId,
@@ -66,6 +79,7 @@ class Worker {
       riskLevel: riskLevel ?? this.riskLevel,
       isBadgeExpired: isBadgeExpired ?? this.isBadgeExpired,
       lastScanTime: lastScanTime ?? this.lastScanTime,
+      qrPayload: qrPayload ?? this.qrPayload,
     );
   }
 
@@ -93,6 +107,8 @@ class Worker {
       'isBadgeExpired': isBadgeExpired,
       'is_badge_expired': isBadgeExpired,
       'lastScanTime': lastScanTime?.toIso8601String(),
+      'qr_payload': effectiveQrPayload,
+      'qrPayload': effectiveQrPayload,
     };
   }
 
@@ -116,6 +132,8 @@ class Worker {
       risk = 'Caution';
     }
 
+    final rawQRPayload = map['qr_payload']?.toString() ?? map['qrPayload']?.toString() ?? '';
+
     return Worker(
       workerId: map['worker_id'] ?? map['workerId'] ?? '',
       name: map['name'] ?? '',
@@ -133,6 +151,7 @@ class Worker {
       lastScanTime: map['last_scan_time'] != null
           ? DateTime.tryParse(map['last_scan_time'].toString())
           : (map['lastScanTime'] != null ? DateTime.tryParse(map['lastScanTime'].toString()) : null),
+      qrPayload: rawQRPayload,
     );
   }
 

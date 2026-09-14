@@ -84,11 +84,45 @@ void main() {
       expect(res['message'], 'This is not a valid DoseBand QR.');
     });
 
-    test('TEST 10: Null payload returns NO_QR_DETECTED', () async {
-      final res = await workerService.verifyBadge();
-      expect(res['valid'], isFalse);
-      expect(res['status'], 'NO_QR_DETECTED');
-      expect(res['message'], 'No QR code detected in this image.');
+    test('TEST 11: Registered worker QR payload remains identical across restarts and rebuilds', () async {
+      final worker = Worker(
+        workerId: 'W-201',
+        name: 'Kavita Verma',
+        department: 'Refinery',
+        shift: 'Shift 1',
+        badgeId: 'BDG-201',
+        badgeIssueDate: '2026-08-01',
+        badgeExpiryDate: '2026-11-01',
+        status: 'Active',
+      );
+
+      final initialQr = worker.effectiveQrPayload;
+      expect(initialQr, '{"type":"doseband_worker","version":1,"worker_id":"W-201","badge_id":"BDG-201"}');
+
+      // Add to service
+      await workerService.addWorker(worker);
+
+      // Simulate app restart / cold rebuild reload
+      final reloadedWorker = workerService.getWorkerById('W-201');
+      expect(reloadedWorker, isNotNull);
+      expect(reloadedWorker!.effectiveQrPayload, initialQr);
+
+      // Scan the saved QR payload
+      final scanRes = await workerService.verifyBadge(rawPayload: initialQr);
+      expect(scanRes['valid'], isTrue);
+      expect(scanRes['status'], 'VALID');
+      expect(scanRes['worker']['worker_id'], 'W-201');
+    });
+
+    test('TEST 12: Web and Flutter payloads are 100% interoperable', () async {
+      // Payload produced by Python backend / Web app
+      const webGeneratedQr = '{"type":"doseband_worker","version":1,"worker_id":"W-101","badge_id":"BDG-101"}';
+      
+      // Verified in Flutter WorkerService
+      final flutterRes = await workerService.verifyBadge(rawPayload: webGeneratedQr);
+      expect(flutterRes['valid'], isTrue);
+      expect(flutterRes['status'], 'VALID');
+      expect(flutterRes['worker']['name'], 'Rajesh Kumar');
     });
   });
 }

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../models/worker.dart';
@@ -17,15 +16,7 @@ class QrBadgeCardWidget extends StatelessWidget {
     this.width = 340,
   });
 
-  String get payload {
-    final map = {
-      'type': 'doseband_worker',
-      'version': 1,
-      'worker_id': worker.workerId,
-      'badge_id': worker.effectiveBadgeId,
-    };
-    return jsonEncode(map);
-  }
+  String get payload => worker.effectiveQrPayload;
 
   @override
   Widget build(BuildContext context) {
