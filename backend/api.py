@@ -290,30 +290,16 @@ async def verify_badge_qr(
     Decodes and verifies an official DoseBand QR badge.
     Accepts either an uploaded QR image file or raw string payload.
     """
-    decoded_wid = None
-    decoded_bid = None
-    payload_str = raw_payload
-
+    image_bytes = None
     if file is not None:
-        contents = await file.read()
-        decoded_wid, decoded_bid, payload_str = qr_manager.decode_qr_from_image_bytes(contents)
-    elif raw_payload:
-        try:
-            parsed = json.loads(raw_payload)
-            if isinstance(parsed, dict) and parsed.get("app") == "DoseBand":
-                decoded_wid = parsed.get("worker_id")
-                decoded_bid = parsed.get("badge_id")
-        except Exception:
-            pass
+        image_bytes = await file.read()
 
-    val_res = qr_manager.validate_badge_profile(decoded_wid, decoded_bid)
-    return {
-        "valid": val_res["valid"],
-        "status": val_res["status"],
-        "message": val_res["message"],
-        "worker": val_res.get("worker"),
-        "raw_payload": payload_str
-    }
+    res = qr_manager.verify_qr_image_or_payload(
+        image_bytes=image_bytes,
+        raw_payload=raw_payload
+    )
+    return res
+
 
 
 # -----------------------------------------------------------------------------

@@ -19,10 +19,10 @@ class QrBadgeCardWidget extends StatelessWidget {
 
   String get payload {
     final map = {
-      'app': 'DoseBand',
+      'type': 'doseband_worker',
+      'version': 1,
       'worker_id': worker.workerId,
       'badge_id': worker.effectiveBadgeId,
-      'version': '1.0',
     };
     return jsonEncode(map);
   }

@@ -215,7 +215,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('❌ QR Rejected: ${res['message'] ?? 'Invalid DoseBand Badge'}'),
+          content: Text('❌ ${res['message'] ?? 'This is not a valid DoseBand QR.'}'),
           backgroundColor: AppTheme.unsafeRed,
           duration: const Duration(seconds: 4),
         ),
@@ -274,7 +274,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       trailing: const Icon(Icons.qr_code_2_rounded, color: AppTheme.safetyOrange),
                       onTap: () {
                         Navigator.pop(ctx);
-                        final payload = '{"app":"DoseBand","worker_id":"${w.workerId}","badge_id":"${w.effectiveBadgeId}","version":"1.0"}';
+                        final payload = '{"type":"doseband_worker","version":1,"worker_id":"${w.workerId}","badge_id":"${w.effectiveBadgeId}"}';
                         _workerService.verifyBadge(rawPayload: payload).then((res) => _handleQrVerificationResponse(res));
                       },
                     ),

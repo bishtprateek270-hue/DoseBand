@@ -241,6 +241,141 @@ class WorkerService extends ChangeNotifier {
     return _readings.where((r) => r.workerId.toUpperCase() == workerId.toUpperCase()).toList();
   }
 
+  /// Parses decoded raw QR text into worker_id, badge_id, and recognition flag
+  static (String?, String?, bool) parseDoseBandPayload(String? rawText) {
+    if (rawText == null || rawText.trim().isEmpty) {
+      return (null, null, false);
+    }
+    final text = rawText.trim();
+
+    // 1. Try parsing JSON
+    try {
+      final parsed = jsonDecode(text);
+      if (parsed is Map) {
+        final bool isExplicitDoseBand = parsed['type'] == 'doseband_worker' ||
+            parsed['app'] == 'DoseBand' ||
+            parsed['system'] == 'DoseBand';
+        final wid = parsed['worker_id'] ?? parsed['workerId'] ?? parsed['id'];
+        final bid = parsed['badge_id'] ?? parsed['badgeId'] ?? parsed['badge'];
+
+        if (wid != null || bid != null) {
+          return (wid?.toString().trim(), bid?.toString().trim(), true);
+        } else if (isExplicitDoseBand) {
+          return (null, null, true);
+        } else {
+          return (null, null, false);
+        }
+      }
+    } catch (_) {}
+
+    // 2. Reject standard non-DoseBand QR payloads (URLs, UPI payments, WiFi, etc.)
+    final lower = text.toLowerCase();
+    if (lower.startsWith('http://') ||
+        lower.startsWith('https://') ||
+        lower.startsWith('upi://') ||
+        lower.startsWith('wifi:') ||
+        lower.startsWith('smsto:') ||
+        lower.startsWith('tel:') ||
+        lower.startsWith('mailto:') ||
+        lower.startsWith('otpauth:')) {
+      return (null, null, false);
+    }
+
+    // 3. DOSEBAND:W-101:BDG-101 or W-101/BDG-101
+    final prefixReg = RegExp(r'DOSEBAND[:\-_/]([A-Za-z0-9\-_]+)[:\-_/]([A-Za-z0-9\-_]+)', caseSensitive: false);
+    final match = prefixReg.firstMatch(text);
+    if (match != null) {
+      return (match.group(1)?.trim(), match.group(2)?.trim(), true);
+    }
+
+    // 4. Legacy BDG-101
+    final badgeReg = RegExp(r'^BDG[-_]?[A-Za-z0-9]+$', caseSensitive: false);
+    if (badgeReg.hasMatch(text)) {
+      return (null, text.trim(), true);
+    }
+
+    // 5. Legacy W-101
+    final workerReg = RegExp(r'^W[-_]?[0-9]+$', caseSensitive: false);
+    if (workerReg.hasMatch(text)) {
+      return (text.trim(), null, true);
+    }
+
+    return (null, null, false);
+  }
+
+  /// Authoritative database verification against local / cached worker repository
+  Map<String, dynamic> validateWorkerBadge({
+    String? workerId,
+    String? badgeId,
+    String? rawPayload,
+  }) {
+    if ((workerId == null || workerId.isEmpty) && (badgeId == null || badgeId.isEmpty)) {
+      return {
+        'valid': false,
+        'status': 'INVALID_QR',
+        'message': 'This is not a valid DoseBand QR.',
+        'worker': null,
+        'raw_payload': rawPayload,
+      };
+    }
+
+    Worker? worker = workerId != null && workerId.isNotEmpty ? getWorkerById(workerId) : null;
+    worker ??= badgeId != null && badgeId.isNotEmpty ? getWorkerByBadgeId(badgeId) : null;
+
+    if (worker == null) {
+      return {
+        'valid': false,
+        'status': 'WORKER_NOT_FOUND',
+        'message': 'Worker is not registered.',
+        'worker': null,
+        'raw_payload': rawPayload,
+      };
+    }
+
+    // Badge mismatch check
+    if (badgeId != null && badgeId.isNotEmpty && worker.effectiveBadgeId.isNotEmpty) {
+      if (worker.effectiveBadgeId.toUpperCase() != badgeId.toUpperCase()) {
+        return {
+          'valid': false,
+          'status': 'BADGE_NOT_REGISTERED',
+          'message': 'Badge is not registered.',
+          'worker': worker.toMap(),
+          'raw_payload': rawPayload,
+        };
+      }
+    }
+
+    // Status check
+    if (worker.status.toLowerCase() != 'active') {
+      return {
+        'valid': false,
+        'status': 'INACTIVE',
+        'message': 'Badge is inactive.',
+        'worker': worker.toMap(),
+        'raw_payload': rawPayload,
+      };
+    }
+
+    // Expiry check
+    if (worker.isBadgeExpired) {
+      return {
+        'valid': false,
+        'status': 'EXPIRED',
+        'message': 'Badge has expired.',
+        'worker': worker.toMap(),
+        'raw_payload': rawPayload,
+      };
+    }
+
+    return {
+      'valid': true,
+      'status': 'VALID',
+      'message': 'Worker verified successfully.',
+      'worker': worker.toMap(),
+      'raw_payload': rawPayload,
+    };
+  }
+
   /// Verifies a worker QR badge via backend API if available, with intelligent local database resolution
   Future<Map<String, dynamic>> verifyBadge({
     Uint8List? imageBytes,
@@ -248,107 +383,55 @@ class WorkerService extends ChangeNotifier {
     String? fileName,
   }) async {
     // 1. Try server verification first if connected
-    Map<String, dynamic>? apiRes;
     try {
-      apiRes = await _apiService.verifyBadgeQr(
+      final apiRes = await _apiService.verifyBadgeQr(
         imageBytes: imageBytes,
         rawPayload: rawPayload,
       );
-      if (apiRes['valid'] == true && apiRes['worker'] != null) {
+      if (apiRes.containsKey('valid')) {
         return apiRes;
       }
-    } catch (_) {
-      // Backend unreachable or offline -> fallback to robust local database verification
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[WorkerService] API verifyBadge note: $e');
+      }
     }
 
-    // 2. Parse raw payload JSON if available
-    String? decodedWid;
-    String? decodedBid;
-    String? payloadStr = rawPayload ?? (apiRes != null ? apiRes['raw_payload']?.toString() : null);
-
-    if (payloadStr != null && payloadStr.trim().isNotEmpty) {
-      try {
-        final parsed = jsonDecode(payloadStr.trim());
-        if (parsed is Map && parsed['app'] == 'DoseBand') {
-          decodedWid = parsed['worker_id']?.toString();
-          decodedBid = parsed['badge_id']?.toString();
-        } else {
-          return {
-            'valid': false,
-            'status': 'UNRECOGNIZED',
-            'message': 'Unrecognized QR Code: Only official DoseBand worker badges generated by this platform are accepted.',
-            'raw_payload': rawPayload,
-          };
-        }
-      } catch (_) {
+    // 2. Local Fallback Verification
+    if (rawPayload != null && rawPayload.trim().isNotEmpty) {
+      final (wid, bid, isRecognized) = parseDoseBandPayload(rawPayload);
+      if (!isRecognized) {
         return {
           'valid': false,
-          'status': 'UNRECOGNIZED',
-          'message': 'Unrecognized QR Code: Only official DoseBand worker badges generated by this platform are accepted.',
+          'status': 'INVALID_QR',
+          'message': 'This is not a valid DoseBand QR.',
+          'worker': null,
           'raw_payload': rawPayload,
         };
       }
+      return validateWorkerBadge(workerId: wid, badgeId: bid, rawPayload: rawPayload);
     }
 
-    // 3. If file name contains worker or badge identifier (e.g. doseband_badge_BDG-102.png or W-102)
-    if (decodedWid == null && fileName != null) {
+    // 3. Fallback from file name if offline and file name matches registered worker
+    if (fileName != null && fileName.isNotEmpty) {
       final upper = fileName.toUpperCase();
       for (final w in _workers) {
         if (upper.contains(w.workerId.toUpperCase()) || upper.contains(w.effectiveBadgeId.toUpperCase())) {
-          decodedWid = w.workerId;
-          decodedBid = w.effectiveBadgeId;
-          payloadStr = '{"app":"DoseBand","worker_id":"${w.workerId}","badge_id":"${w.effectiveBadgeId}","version":"1.0"}';
-          break;
+          return validateWorkerBadge(
+            workerId: w.workerId,
+            badgeId: w.effectiveBadgeId,
+            rawPayload: '{"type":"doseband_worker","version":1,"worker_id":"${w.workerId}","badge_id":"${w.effectiveBadgeId}"}',
+          );
         }
-      }
-    }
-
-    // 4. Validate against worker repository
-    if (decodedWid != null || decodedBid != null) {
-      Worker? worker = decodedWid != null ? getWorkerById(decodedWid) : null;
-      worker ??= decodedBid != null ? getWorkerByBadgeId(decodedBid) : null;
-
-      if (worker != null) {
-        if (worker.isBadgeExpired) {
-          return {
-            'valid': false,
-            'status': 'EXPIRED',
-            'message': 'Dosimeter Badge ${worker.effectiveBadgeId} expired on ${worker.badgeExpiryDate}. Immediate replacement required!',
-            'worker': worker.toMap(),
-            'raw_payload': payloadStr,
-          };
-        }
-        if (worker.status != 'Active') {
-          return {
-            'valid': false,
-            'status': 'INACTIVE',
-            'message': 'Worker status is ${worker.status} (Not Active).',
-            'worker': worker.toMap(),
-            'raw_payload': payloadStr,
-          };
-        }
-        return {
-          'valid': true,
-          'status': 'VALID',
-          'message': 'Badge ${worker.effectiveBadgeId} is VALID & active for ${worker.name} (${worker.workerId}).',
-          'worker': worker.toMap(),
-          'raw_payload': payloadStr,
-        };
-      } else {
-        return {
-          'valid': false,
-          'status': 'NOT_FOUND',
-          'message': 'Worker/Badge identifier ($decodedWid / $decodedBid) is not registered in the database.',
-          'raw_payload': payloadStr,
-        };
       }
     }
 
     return {
       'valid': false,
-      'status': 'UNRECOGNIZED',
-      'message': 'No decodable DoseBand QR pattern detected in the image.',
-      'raw_payload': payloadStr ?? 'N/A',
+      'status': 'NO_QR_DETECTED',
+      'message': 'No QR code detected in this image.',
+      'worker': null,
+      'raw_payload': null,
     };
   }
 
